@@ -101,7 +101,8 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         scrollView.isPagingEnabled = true
         scrollView.showsVerticalScrollIndicator = false
         scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.decelerationRate = .fast
+        // 稍微放慢一点（.fast=0.99，.normal=0.998）
+        scrollView.decelerationRate = UIScrollView.DecelerationRate(rawValue: 0.995)
         scrollView.backgroundColor = .black
         scrollView.delegate = self
         scrollView.alwaysBounceVertical = true
@@ -241,7 +242,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
         // 把后面 2 条整段下载到本地缓存（循环/切条就不会再黑）
         if AppSettings.shared.videoCacheMB > 0 {
-            let ahead = Array(items[min(items.count - 1, page + 1)...])
+            let ahead = Array(items[page...])
             VideoCache.shared.prefetch(Array(ahead), limit: 2)
         }
     }
