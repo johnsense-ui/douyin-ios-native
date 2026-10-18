@@ -112,6 +112,12 @@ final class StateStore: ObservableObject {
         persist()
     }
 
+    /// 启动时从服务端恢复（重装 App / 换手机后不丢）
+    func pullFromServer() async {
+        guard let p = await APIClient.shared.pullState() else { return }
+        merge(liked: p.likedIDs, saved: p.savedIDs, following: p.followingIDs)
+    }
+
     // MARK: - 同步
 
     private func scheduleFlush() {
