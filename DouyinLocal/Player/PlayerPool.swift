@@ -32,6 +32,8 @@ final class PlayerSlot: NSObject {
     private var statusObs: NSKeyValueObservation?
     private var looper: AVPlayerLooper?
     private var loopEndObs: NSObjectProtocol?
+    /// 是否等就绪后补做预热
+    private var wantsPreroll = false
 
     override init() {
         super.init()
@@ -60,6 +62,7 @@ final class PlayerSlot: NSObject {
                 guard self.ready != ok else { return }
                 self.ready = ok
                 if ok, let v = self.vid { self.onReady?(v) }
+                if ok { self.prerollIfWanted() }
             }
         }
 
@@ -97,6 +100,31 @@ final class PlayerSlot: NSObject {
     }
     func pause() { player.pause() }
 
+    /// 预热解码器：让播放管线提前准备好，真正 play 时几乎零延迟。
+    /// 注意：未就绪时 preroll 会直接失败，所以要等 ready 之后再调；
+    /// 这里做「未就绪则挂起，就绪后自动预热」。
+    func preroll() {
+        guard player.rate <= 0 else { return }
+        guard ready else {
+            wantsPreroll = true      // 等 status 变 ready 时补上
+            return
+        }
+        wantsPreroll = false
+        player.preroll(atRate: 1.0) { _ in }
+    }
+
+    /// 就绪后如果之前请求过预热，补上
+    fileprivate func prerollIfWanted() {
+        guard wantsPreroll, ready, player.rate <= 0 else { return }
+        wantsPreroll = false
+        player.preroll(atRate: 1.0) { _ in }
+    }
+
+    var isMuted: Bool {
+        get { player.isMuted }
+        set { player.isMuted = newValue }
+    }
+
     func clear() {
         player.pause()
         statusObs?.invalidate()
@@ -110,6 +138,7 @@ final class PlayerSlot: NSObject {
         player.removeAllItems()
         vid = nil
         ready = false
+        wantsPreroll = false
     }
 
     deinit {
@@ -206,6 +235,19 @@ final class PlayerPool: ObservableObject {
         slots[i].preloadFrame()
     }
 
+    /// 预热下一条的解码器（不等它 ready 就提前建管线）
+    func preroll(_ item: FeedItem) {
+        let i = assign(item)
+        slots[i].preroll()
+    }
+
+    /// 落位时把非当前条全部静音
+    func muteAllExcept(_ vid: String) {
+        for s in slots {
+            s.isMuted = (s.vid != vid)
+        }
+    }
+
     /// 长按倍速
     func setRate(_ rate: Float, vid: String) {
         if let i = slotOf[vid] {
@@ -256,6 +298,10 @@ final class PlayerPool: ObservableObject {
     }
 
     func pause() { for s in slots { s.pause() } }
+
+    func pauseVid(_ vid: String) {
+        if let i = slotOf[vid] { slots[i].pause() }
+    }
 
     func resume(_ vid: String) {
         if let i = slotOf[vid] { slots[i].play() }
