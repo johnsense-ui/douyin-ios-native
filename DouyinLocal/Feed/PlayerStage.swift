@@ -22,7 +22,7 @@ final class PageVideoView: UIView {
     let playerLayer = AVPlayerLayer()
     private let coverView = UIImageView()
 
-    private(set) var pageIndex: Int = -1
+    var pageIndex: Int = -1
     private(set) var vid: String = ""
 
     override init(frame: CGRect) {
