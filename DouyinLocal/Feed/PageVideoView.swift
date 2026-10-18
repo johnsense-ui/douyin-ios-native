@@ -1,14 +1,16 @@
-﻿//
+//
 //  PageVideoView.swift
 //  DouyinLocal
 //
 //  单页：视频画面 + 文案 + 右栏 + 进度条，全部 UIKit。
 //
-//  关键点：
-//   · 时间观察者要记住「属于哪个 player」，换 player 时必须从旧的移除
-//     —— 否则 removeTimeObserver 传错对象会直接抛异常闪退
-//   · 非当前页用零容差 seek 停在第一帧（0.05s 处，确保有真实画面）
-//   · 进度条放最底部，文案和右栏都往上让，避免重叠
+//  画面显示优先级（任何时刻都不允许「什么都没有」）：
+//     ① AVPlayerLayer 真画面（isReadyForDisplay == true）
+//     ② FramePrefetcher 解码出来的**真实第 0 帧**（图片，最快）
+//     ③ 封面图（仅作最后兜底）
+//     ④ 黑
+//
+//  关键：只有 ① 就绪才隐藏 ②③；绝不在 seek 回调里提前藏图。
 //
 
 import SwiftUI
@@ -120,7 +122,10 @@ final class RailItem: UIView {
 
 final class PageVideoView: UIView {
     let playerLayer = AVPlayerLayer()
+    /// 封面（最后兜底）
     private let coverView = UIImageView()
+    /// 真实第 0 帧（优先于封面）
+    private let frameView = UIImageView()
 
     private let barBg = UIView()
     private let barFill = UIView()
@@ -138,7 +143,6 @@ final class PageVideoView: UIView {
 
     private var displayObs: NSKeyValueObservation?
     private var statusObs: NSKeyValueObservation?
-    /// 时间观察者所属的 player（换 player 时必须从它身上移除）
     private weak var obsPlayer: AVPlayer?
     private var timeObs: Any?
 
@@ -163,6 +167,11 @@ final class PageVideoView: UIView {
         coverView.contentMode = .scaleAspectFit
         coverView.backgroundColor = .clear
         addSubview(coverView)
+
+        frameView.contentMode = .scaleAspectFit
+        frameView.backgroundColor = .clear
+        frameView.alpha = 0
+        addSubview(frameView)
 
         barBg.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         barFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
@@ -210,12 +219,15 @@ final class PageVideoView: UIView {
 
         displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
             guard l.isReadyForDisplay else { return }
-            DispatchQueue.main.async { self?.revealVideo() }
+            DispatchQueue.main.async { self?.updateStills() }
         }
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(stateChanged),
             name: .douyinStateChanged, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(frameBecameReady(_:)),
+            name: .douyinFrameReady, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -241,8 +253,12 @@ final class PageVideoView: UIView {
 
         if vid != item.vid {
             vid = item.vid
-            coverView.alpha = 1
+            frameView.alpha = 0
+            frameView.image = nil
             loadCover(item.coverURL)
+            if let img = FramePrefetcher.shared.cached(item.vid) {
+                frameView.image = img
+            }
         }
 
         authorDot.set(name: item.author)
@@ -250,10 +266,7 @@ final class PageVideoView: UIView {
         captionLabel.text = item.caption.isEmpty ? nil : item.caption
         heart.set(text: item.diggText)
         refreshState()
-
-        if playerLayer.isReadyForDisplay && isActivePage {
-            coverView.alpha = 0
-        }
+        updateStills()
         setNeedsLayout()
     }
 
@@ -264,6 +277,8 @@ final class PageVideoView: UIView {
         item = nil
         isActivePage = false
         coverView.alpha = 1
+        frameView.alpha = 0
+        frameView.image = nil
     }
 
     private func attachObservers(to player: AVPlayer) {
@@ -282,7 +297,7 @@ final class PageVideoView: UIView {
                     if self.isActivePage {
                         self.playerLayer.player?.play()
                     } else {
-                        self.seekToFirstFrame()
+                        self.parkAtFirstFrame()
                     }
                 }
             }
@@ -299,6 +314,35 @@ final class PageVideoView: UIView {
         statusObs = nil
     }
 
+    // MARK: 画面显示优先级
+
+    private func updateStills() {
+        // ① 真画面已上屏
+        if playerLayer.isReadyForDisplay {
+            if coverView.alpha != 0 { coverView.alpha = 0 }
+            if frameView.alpha != 0 { frameView.alpha = 0 }
+            return
+        }
+        // ② 真实第 0 帧
+        if let img = FramePrefetcher.shared.cached(vid) {
+            if frameView.image !== img { frameView.image = img }
+            if frameView.alpha != 1 { frameView.alpha = 1 }
+            if coverView.alpha != 0 { coverView.alpha = 0 }
+        } else {
+            // ③ 封面兜底
+            if frameView.alpha != 0 { frameView.alpha = 0 }
+            if coverView.alpha != 1 { coverView.alpha = 1 }
+        }
+    }
+
+    @objc private func frameBecameReady(_ note: Notification) {
+        guard let v = note.object as? String, v == vid else { return }
+        if let img = FramePrefetcher.shared.cached(vid) {
+            frameView.image = img
+        }
+        updateStills()
+    }
+
     // MARK: 播放状态
 
     func setActive(_ active: Bool) {
@@ -306,32 +350,21 @@ final class PageVideoView: UIView {
         guard let p = playerLayer.player else { return }
         if active {
             p.play()
-            if playerLayer.isReadyForDisplay { revealVideo() }
         } else {
             p.pause()
-            seekToFirstFrame()
+            parkAtFirstFrame()
         }
+        updateStills()
     }
 
-    /// 零容差 seek 到 0.05s，强制解出一帧真实画面
-    private func seekToFirstFrame() {
+    /// 停在第一帧位置；不揭静图，等 isReadyForDisplay 自己切
+    private func parkAtFirstFrame() {
         guard let p = playerLayer.player else { return }
         let t = CMTime(seconds: 0.05, preferredTimescale: 600)
-        p.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] ok in
-            guard ok else { return }
-            DispatchQueue.main.async {
-                guard let self, !self.isActivePage else { return }
-                self.revealVideo()
-            }
-        }
+        p.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
     }
 
-    func markReady() { revealVideo() }
-
-    private func revealVideo() {
-        guard coverView.alpha != 0 else { return }
-        UIView.animate(withDuration: 0.1) { self.coverView.alpha = 0 }
-    }
+    func markReady() { updateStills() }
 
     private func tick(_ t: CMTime) {
         let dur = playerLayer.player?.currentItem?.duration.seconds ?? 0
@@ -407,6 +440,7 @@ final class PageVideoView: UIView {
         CATransaction.setDisableActions(true)
         playerLayer.frame = bounds
         coverView.frame = bounds
+        frameView.frame = bounds
         barBg.frame = CGRect(x: 0, y: h - 80, width: w, height: 1.5)
         barFill.frame = CGRect(x: 0, y: h - 80, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
@@ -423,9 +457,8 @@ final class PageVideoView: UIView {
             v.frame = CGRect(x: w - railW - 4, y: y, width: railW, height: heights[i])
             y += heights[i] + spacing
         }
-        avatarDot.frame = CGRect(x: (railW - 46) / 2, y: 0, width: 46, height: 46)
-        // 小加号：水平居中在头像下沿
         let avatarX = (railW - 46) / 2
+        avatarDot.frame = CGRect(x: avatarX, y: 0, width: 46, height: 46)
         followBadge.frame = CGRect(x: avatarX + (46 - 19) / 2, y: 46 - 12, width: 19, height: 19)
 
         let textW = w - 96 - 14
