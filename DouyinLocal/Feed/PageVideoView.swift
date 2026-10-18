@@ -1,24 +1,21 @@
-﻿//
-//  PlayerStage.swift
+//
+//  PageVideoView.swift
 //  DouyinLocal
 //
-//  原生分页滚动 + 每页一个视频画面 + 每页自带的 UIKit 叠加 UI。
+//  单页：视频画面 + 文案 + 右栏 + 进度条，全部 UIKit。
 //
-//  为什么叠加 UI 用 UIKit：
-//   · 它是 UIScrollView 的子视图，跟着滚动视图原生物理移动 —— 零延迟跟手
-//   · SwiftUI 靠回调同步偏移会天然慢半拍
-//
-//  对齐抖音：
-//   · 拖动时整页（画面 + 文案 + 右栏）1:1 上移，下方露出下一条的第一帧
-//   · 拖动期间旧视频继续播放，新视频停在第一帧
-//   · 吸附完成后才切换播放
+//  关键点：
+//   · 时间观察者要记住「属于哪个 player」，换 player 时必须从旧的移除
+//     —— 否则 removeTimeObserver 传错对象会直接抛异常闪退
+//   · 非当前页用零容差 seek 停在第一帧（0.05s 处，确保有真实画面）
+//   · 进度条放最底部，文案和右栏都往上让，避免重叠
 //
 
 import SwiftUI
 import UIKit
 import AVFoundation
 
-// MARK: - 可点击的容器（不会被单击手势吞掉）
+// MARK: - 可点击容器
 
 final class TapRow: UIControl {
     var onTap: (() -> Void)?
@@ -69,7 +66,7 @@ final class AvatarDot: UIView {
     }
 }
 
-// MARK: - 侧栏图标（图标 + 数字）
+// MARK: - 侧栏条目
 
 final class RailItem: UIView {
     let button = UIButton(type: .custom)
@@ -103,7 +100,6 @@ final class RailItem: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     func set(text: String) { label.text = text }
-
     func setTint(_ c: UIColor) { button.tintColor = c }
 
     override var intrinsicContentSize: CGSize {
@@ -120,17 +116,15 @@ final class RailItem: UIView {
     override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
 }
 
-// MARK: - 单页（视频 + 文案 + 侧栏 + 进度条）
+// MARK: - 单页
 
 final class PageVideoView: UIView {
     let playerLayer = AVPlayerLayer()
     private let coverView = UIImageView()
 
-    // 进度条
     private let barBg = UIView()
     private let barFill = UIView()
 
-    // 右栏
     private let avatarBtn = TapRow()
     private let avatarDot = AvatarDot(size: 46)
     private let followBadge = UIView()
@@ -138,18 +132,21 @@ final class PageVideoView: UIView {
     private let share = RailItem(systemName: "arrowshape.turn.up.right.fill")
     private let save = RailItem(systemName: "bookmark.fill")
 
-    // 底部文案
     private let authorRow = TapRow()
     private let authorDot = AvatarDot(size: 38)
     private let authorName = UILabel()
     private let captionLabel = UILabel()
 
     private var displayObs: NSKeyValueObservation?
+    private var statusObs: NSKeyValueObservation?
+    /// 时间观察者所属的 player（换 player 时必须从它身上移除）
+    private weak var obsPlayer: AVPlayer?
     private var timeObs: Any?
 
-    var pageIndex: Int = -1
+    private(set) var pageIndex: Int = -1
     private(set) var vid: String = ""
     private var item: FeedItem?
+    private(set) var isActivePage = false
 
     var onLike: ((String) -> Void)?
     var onSave: ((String) -> Void)?
@@ -168,18 +165,16 @@ final class PageVideoView: UIView {
         coverView.backgroundColor = .clear
         addSubview(coverView)
 
-        // 进度条
         barBg.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         barFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
         addSubview(barBg)
         addSubview(barFill)
 
-        // 右栏
         avatarBtn.addSubview(avatarDot)
         followBadge.backgroundColor = UIColor(Theme.primary)
         followBadge.layer.cornerRadius = 9.5
         let plus = UIImageView(image: UIImage(systemName: "plus",
-                                             withConfiguration: UIImage.SymbolConfiguration(
+                                              withConfiguration: UIImage.SymbolConfiguration(
                                                 pointSize: 9, weight: .bold)))
         plus.tintColor = .white
         plus.contentMode = .center
@@ -200,13 +195,10 @@ final class PageVideoView: UIView {
         addSubview(share)
         addSubview(save)
 
-        // 作者行
         authorRow.addSubview(authorDot)
         authorName.textColor = .white
         authorName.font = .systemFont(ofSize: 15.5, weight: .semibold)
-        authorName.layer.shadowColor = UIColor.black.cgColor
-        authorName.layer.shadowOpacity = 0.45
-        authorName.layer.shadowRadius = 3
+        addShadow(authorName)
         authorRow.addSubview(authorName)
         authorRow.onTap = { [weak self] in
             guard let a = self?.item?.authorId else { return }
@@ -217,9 +209,7 @@ final class PageVideoView: UIView {
         captionLabel.textColor = .white
         captionLabel.font = .systemFont(ofSize: 14.5)
         captionLabel.numberOfLines = 2
-        captionLabel.layer.shadowColor = UIColor.black.cgColor
-        captionLabel.layer.shadowOpacity = 0.45
-        captionLabel.layer.shadowRadius = 3
+        addShadow(captionLabel)
         addSubview(captionLabel)
 
         displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
@@ -234,58 +224,109 @@ final class PageVideoView: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    // MARK: 绑定
+    private func addShadow(_ v: UIView) {
+        v.layer.shadowColor = UIColor.black.cgColor
+        v.layer.shadowOpacity = 0.5
+        v.layer.shadowRadius = 3
+        v.layer.shadowOffset = CGSize(width: 0, height: 1)
+    }
+
+    // MARK: 绑定 / 解绑
 
     func bind(index: Int, item: FeedItem, player: AVPlayer, ready: Bool) {
         pageIndex = index
         self.item = item
 
+        if obsPlayer !== player {
+            detachObservers()
+            playerLayer.player = player
+            attachObservers(to: player)
+        }
+
         if vid != item.vid {
             vid = item.vid
-            playerLayer.player = player
             coverView.alpha = 1
             loadCover(item.coverURL)
-            attachTimeObserver(player)
-        } else if playerLayer.player !== player {
-            playerLayer.player = player
-            attachTimeObserver(player)
         }
 
         authorDot.set(name: item.author)
         authorName.text = "@\(item.author)"
         captionLabel.text = item.caption.isEmpty ? nil : item.caption
         heart.set(text: item.diggText)
-
         refreshState()
 
-        if playerLayer.isReadyForDisplay {
+        if playerLayer.isReadyForDisplay && isActivePage {
             coverView.alpha = 0
-        } else if !ready {
-            coverView.alpha = 1
         }
         setNeedsLayout()
     }
 
-    /// 同步点赞/收藏/关注状态
-    func refreshState() {
-        guard let item else { return }
-        let s = StateStore.shared
-        let liked = s.isLiked(item.vid)
-        let saved = s.isSaved(item.vid)
-        let following = s.isFollowing(item.authorId)
-        heart.setTint(liked ? UIColor(red: 0xFE / 255.0, green: 0x2C / 255.0, blue: 0x55 / 255.0, alpha: 1) : .white)
-        save.setTint(saved ? .systemYellow : .white)
-        followBadge.isHidden = following
+    func unbind() {
+        detachObservers()
+        playerLayer.player = nil
+        vid = ""
+        item = nil
+        isActivePage = false
+        coverView.alpha = 1
     }
 
-    /// 预载第一帧（用零容差 seek 强制解码出一帧）
-    func preload() {
-        guard let pl = playerLayer.player else { return }
-        pl.pause()
-        let t = CMTime(value: 1, timescale: 600)
-        pl.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] ok in
+    private func attachObservers(to player: AVPlayer) {
+        obsPlayer = player
+
+        let iv = CMTime(seconds: 0.25, preferredTimescale: 600)
+        timeObs = player.addPeriodicTimeObserver(forInterval: iv, queue: .main) { [weak self] t in
+            self?.tick(t)
+        }
+
+        if let ci = player.currentItem {
+            statusObs = ci.observe(\.status, options: [.new, .initial]) { [weak self] it, _ in
+                guard it.status == .readyToPlay else { return }
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if self.isActivePage {
+                        self.playerLayer.player?.play()
+                    } else {
+                        self.seekToFirstFrame()
+                    }
+                }
+            }
+        }
+    }
+
+    private func detachObservers() {
+        if let o = timeObs, let p = obsPlayer {
+            p.removeTimeObserver(o)
+        }
+        timeObs = nil
+        obsPlayer = nil
+        statusObs?.invalidate()
+        statusObs = nil
+    }
+
+    // MARK: 播放状态
+
+    func setActive(_ active: Bool) {
+        isActivePage = active
+        guard let p = playerLayer.player else { return }
+        if active {
+            p.play()
+            if playerLayer.isReadyForDisplay { revealVideo() }
+        } else {
+            p.pause()
+            seekToFirstFrame()
+        }
+    }
+
+    /// 零容差 seek 到 0.05s，强制解出一帧真实画面
+    private func seekToFirstFrame() {
+        guard let p = playerLayer.player else { return }
+        let t = CMTime(seconds: 0.05, preferredTimescale: 600)
+        p.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] ok in
             guard ok else { return }
-            DispatchQueue.main.async { self?.revealVideo() }
+            DispatchQueue.main.async {
+                guard let self, !self.isActivePage else { return }
+                self.revealVideo()
+            }
         }
     }
 
@@ -296,32 +337,31 @@ final class PageVideoView: UIView {
         UIView.animate(withDuration: 0.1) { self.coverView.alpha = 0 }
     }
 
-    private func attachTimeObserver(_ player: AVPlayer) {
-        if let o = timeObs { player.removeTimeObserver(o) }
-        timeObs = nil
-        let iv = CMTime(seconds: 0.25, preferredTimescale: 600)
-        timeObs = player.addPeriodicTimeObserver(forInterval: iv, queue: .main) { [weak self] t in
-            self?.updateProgress(t, player: player)
-        }
-    }
-
-    private func updateProgress(_ t: CMTime, player: AVPlayer) {
-        let dur = player.currentItem?.duration.seconds ?? 0
+    private func tick(_ t: CMTime) {
+        let dur = playerLayer.player?.currentItem?.duration.seconds ?? 0
         guard dur.isFinite, dur > 0 else { return }
         let p = max(0, min(1, t.seconds / dur))
-        setBar(p)
-    }
-
-    private func setBar(_ p: Double) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let w = bounds.width * CGFloat(p)
-        barFill.frame = CGRect(x: 0, y: bounds.height - 88, width: w, height: 1.5)
+        barFill.frame = CGRect(x: 0, y: barBg.frame.minY,
+                               width: bounds.width * CGFloat(p), height: 1.5)
         CATransaction.commit()
     }
 
+    // MARK: 交互
+
     @objc private func stateChanged() {
         DispatchQueue.main.async { self.refreshState() }
+    }
+
+    func refreshState() {
+        guard let item else { return }
+        let s = StateStore.shared
+        heart.setTint(s.isLiked(item.vid)
+                      ? UIColor(red: 0xFE / 255.0, green: 0x2C / 255.0, blue: 0x55 / 255.0, alpha: 1)
+                      : .white)
+        save.setTint(s.isSaved(item.vid) ? .systemYellow : .white)
+        followBadge.isHidden = s.isFollowing(item.authorId)
     }
 
     @objc private func tapLike() {
@@ -368,7 +408,7 @@ final class PageVideoView: UIView {
 
     deinit {
         NotificationCenter.default.removeObserver(self)
-        if let o = timeObs { playerLayer.player?.removeTimeObserver(o) }
+        detachObservers()
         displayObs?.invalidate()
     }
 
@@ -382,32 +422,30 @@ final class PageVideoView: UIView {
         CATransaction.setDisableActions(true)
         playerLayer.frame = bounds
         coverView.frame = bounds
-        barBg.frame = CGRect(x: 0, y: h - 88, width: w, height: 1.5)
+        barBg.frame = CGRect(x: 0, y: h - 80, width: w, height: 1.5)
+        barFill.frame = CGRect(x: 0, y: h - 80, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
 
-        // 右栏
         let railW: CGFloat = 64
         let items: [UIView] = [avatarBtn, heart, share, save]
-        var heights: [CGFloat] = [46 + 8, heart.intrinsicContentSize.height,
+        let heights: [CGFloat] = [46 + 8,
+                                  heart.intrinsicContentSize.height,
                                   share.intrinsicContentSize.height,
                                   save.intrinsicContentSize.height]
         let spacing: CGFloat = 14
         let total = heights.reduce(0, +) + spacing * CGFloat(items.count - 1)
-        var y = h - 78 - total
+        var y = h - 96 - total
         for (i, v) in items.enumerated() {
-            let hh = heights[i]
-            v.frame = CGRect(x: w - railW - 4, y: y, width: railW, height: hh)
-            y += hh + spacing
+            v.frame = CGRect(x: w - railW - 4, y: y, width: railW, height: heights[i])
+            y += heights[i] + spacing
         }
         avatarDot.frame = CGRect(x: (railW - 46) / 2, y: 0, width: 46, height: 46)
         followBadge.frame = CGRect(x: (railW - 19) / 2 + 8, y: 46 - 10, width: 19, height: 19)
 
-        // 文案
         let textW = w - 96 - 14
         authorDot.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
         authorName.frame = CGRect(x: 47, y: 9, width: textW - 47, height: 20)
-        authorRow.frame = CGRect(x: 14, y: h - 148, width: textW, height: 38)
-
-        captionLabel.frame = CGRect(x: 14, y: h - 100, width: textW, height: 40)
+        authorRow.frame = CGRect(x: 14, y: h - 172, width: textW, height: 38)
+        captionLabel.frame = CGRect(x: 14, y: h - 126, width: textW, height: 40)
     }
 }
