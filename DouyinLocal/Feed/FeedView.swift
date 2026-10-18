@@ -1,4 +1,4 @@
-﻿//
+//
 //  FeedView.swift
 //  DouyinLocal
 //
@@ -109,7 +109,15 @@ struct FeedView: View {
             }
         }
         .statusBarHidden(true)
-        .onAppear { Task { await store.reload() } }
+        .onAppear {
+            Task {
+                // 启动时先把电脑上新增的视频并进索引，再拉推荐流
+                if settings.autoScan {
+                    _ = try? await APIClient.shared.rescan()
+                }
+                await store.reload()
+            }
+        }
         .onChange(of: store.items.count) { _, _ in
             if index < store.items.count {
                 pool.focus(on: store.items, index: index)
