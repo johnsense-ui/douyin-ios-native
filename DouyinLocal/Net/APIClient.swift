@@ -113,6 +113,13 @@ final class APIClient {
         try await get("api2/stats", [:])
     }
 
+    /// 服务端预生成的「视频第一帧」地址
+    static func frameURL(_ vid: String) -> URL? {
+        guard !vid.isEmpty else { return nil }
+        return baseURL.appendingPathComponent("frames")
+            .appendingPathComponent(vid + ".jpg")
+    }
+
     // MARK: - 状态
 
     func pushState(liked: [String: Bool] = [:],
