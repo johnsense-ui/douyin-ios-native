@@ -60,8 +60,8 @@ final class APIClient {
 
     /// 推荐流。seed 为空时服务端生成并返回，后续翻页带上同一个 seed。
     func feed(seed: String? = nil, offset: Int, limit: Int = 12,
-              tab: String = "recommend") async throws -> FeedPage {
-        var q = ["offset": "\(offset)", "limit": "\(limit)", "tab": tab]
+              tab: String = "recommend", algo: String = "mixed") async throws -> FeedPage {
+        var q = ["offset": "\(offset)", "limit": "\(limit)", "tab": tab, "algo": algo]
         if let seed, !seed.isEmpty { q["seed"] = seed }
         return try await get("api2/feed", q)
     }
