@@ -15,7 +15,6 @@
 		A1B2C3D40000000000000205 /* PlayerStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000105 /* PlayerStage.swift */; };
 		A1B2C3D40000000000000206 /* PlayerPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000106 /* PlayerPool.swift */; };
 		A1B2C3D40000000000000207 /* AuthorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000107 /* AuthorView.swift */; };
-		A1B2C3D40000000000000208 /* AuthorPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000108 /* AuthorPlayerView.swift */; };
 		A1B2C3D40000000000000209 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000109 /* SearchView.swift */; };
 		A1B2C3D4000000000000020A /* StateStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000000000000010A /* StateStore.swift */; };
 		A1B2C3D4000000000000020B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000000000000010B /* Theme.swift */; };
@@ -35,7 +34,6 @@
 		A1B2C3D40000000000000105 /* PlayerStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerStage.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000106 /* PlayerPool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPool.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000107 /* AuthorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorView.swift; sourceTree = "<group>"; };
-		A1B2C3D40000000000000108 /* AuthorPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorPlayerView.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000109 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		A1B2C3D4000000000000010A /* StateStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateStore.swift; sourceTree = "<group>"; };
 		A1B2C3D4000000000000010B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -141,7 +139,6 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D40000000000000107 /* AuthorView.swift */,
-				A1B2C3D40000000000000108 /* AuthorPlayerView.swift */,
 			);
 			path = Author;
 			sourceTree = "<group>";
@@ -257,7 +254,6 @@
 				A1B2C3D40000000000000205 /* PlayerStage.swift in Sources */,
 				A1B2C3D40000000000000206 /* PlayerPool.swift in Sources */,
 				A1B2C3D40000000000000207 /* AuthorView.swift in Sources */,
-				A1B2C3D40000000000000208 /* AuthorPlayerView.swift in Sources */,
 				A1B2C3D40000000000000209 /* SearchView.swift in Sources */,
 				A1B2C3D4000000000000020A /* StateStore.swift in Sources */,
 				A1B2C3D4000000000000020B /* Theme.swift in Sources */,
