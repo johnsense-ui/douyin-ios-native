@@ -92,12 +92,20 @@ struct FeedView: View {
 
             // 左滑进作者主页
             if let aid = slideAuthor {
-                AuthorView(authorId: aid, onClose: {
-                    withAnimation(.easeOut(duration: 0.2)) { slideAuthor = nil }
-                })
-                .background(Color.black)
-                .transition(.move(edge: .trailing))
-                .zIndex(20)
+                AuthorView(authorId: aid, onClose: closeSlide)
+                    .background(Color.black)
+                    .transition(.move(edge: .trailing))
+                    .zIndex(20)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 24)
+                            .onEnded { v in
+                                // 右滑返回
+                                if v.translation.width > 90,
+                                   abs(v.translation.height) < 80 {
+                                    closeSlide()
+                                }
+                            }
+                    )
             }
         }
         .statusBarHidden(true)
@@ -177,6 +185,12 @@ struct FeedView: View {
     private func openSlideAuthor(_ aid: String) {
         withAnimation(.easeOut(duration: 0.22)) {
             slideAuthor = aid
+        }
+    }
+
+    private func closeSlide() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            slideAuthor = nil
         }
     }
 
