@@ -1,4 +1,4 @@
-//
+﻿//
 //  Models.swift
 //  DouyinLocal
 //
@@ -177,4 +177,22 @@ struct PlayerTarget: Identifiable, Hashable {
     let vid: String
     let author: String
     var id: String { vid }
+}
+
+/// 重新扫描结果
+struct RescanResult: Decodable {
+    let ok: Bool
+    let before: Int
+    let after: Int
+    let added: Int
+    let removed: Int
+    let elapsed: Double
+}
+
+/// 服务端统计
+struct ServerStats: Decodable {
+    let ok: Bool
+    let videos: Int
+    let authors: Int
+    let authorsWithVideo: Int
 }
