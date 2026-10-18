@@ -1,4 +1,4 @@
-//
+﻿//
 //  PlayerPool.swift
 //  DouyinLocal
 //
@@ -40,10 +40,14 @@ final class PlayerSlot: NSObject {
     }
 
     func prepare(_ item: FeedItem) {
-        guard let url = item.videoURL else { return }
+        guard let remote = item.videoURL else { return }
         if vid == item.vid { return }
         clear()
         vid = item.vid
+
+        // 有本地缓存就播本地（seek/循环都不会黑），否则先播网络流
+        let url = VideoCache.shared.localURL(item.vid) ?? remote
+        if url.isFileURL { VideoCache.shared.pin(item.vid) }
 
         let pi = AVPlayerItem(url: url)
         pi.preferredForwardBufferDuration = 3.0
