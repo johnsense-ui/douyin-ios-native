@@ -149,3 +149,8 @@ struct FeedItemsPage: Decodable {
     let ok: Bool
     let items: [FeedItem]
 }
+
+/// 可 Identifiable 的 authorId，供 .sheet(item:) 使用
+struct AuthorTarget: Identifiable, Hashable {
+    let id: String
+}
