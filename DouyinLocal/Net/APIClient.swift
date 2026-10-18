@@ -1,9 +1,9 @@
-//
+﻿//
 //  APIClient.swift
 //  DouyinLocal
 //
 //  服务端：index_service（127.0.0.1:8792）
-//  手机访问：Tailscale Serve → https://locvid-pc.tail83739b.ts.net:8444
+//  手机访问：Tailscale Serve → https://locvid-pc.tail83739b.ts.net:8446
 //
 
 import Foundation
@@ -16,7 +16,7 @@ final class APIClient {
         if let s = UserDefaults.standard.string(forKey: "serverBase"), let u = URL(string: s) {
             return u
         }
-        return URL(string: "https://locvid-pc.tail83739b.ts.net:8444")!
+        return URL(string: "https://locvid-pc.tail83739b.ts.net:8446")!
     }
 
     static func setBaseURL(_ s: String) {
