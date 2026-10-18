@@ -83,19 +83,11 @@ final class RailItem: UIView {
         button.setImage(UIImage(systemName: systemName,
                                 withConfiguration: UIImage.SymbolConfiguration(
                                     pointSize: iconSize, weight: .regular)), for: .normal)
-        button.layer.shadowColor = UIColor.black.cgColor
-        button.layer.shadowOpacity = 0.4
-        button.layer.shadowRadius = 3
-        button.layer.shadowOffset = CGSize(width: 0, height: 1)
         addSubview(button)
 
         label.textColor = .white
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.textAlignment = .center
-        label.layer.shadowColor = UIColor.black.cgColor
-        label.layer.shadowOpacity = 0.45
-        label.layer.shadowRadius = 3
-        label.layer.shadowOffset = CGSize(width: 0, height: 1)
         addSubview(label)
     }
 
@@ -126,6 +118,8 @@ final class PageVideoView: UIView {
     private let coverView = UIImageView()
     /// 真实第 0 帧（优先于封面）
     private let frameView = UIImageView()
+    /// 底部渐变：替代文字阴影，一个图层解决可读性（比 5 处阴影便宜得多）
+    private let bottomFade = CAGradientLayer()
 
     private let barBg = UIView()
     private let barFill = UIView()
@@ -150,6 +144,8 @@ final class PageVideoView: UIView {
     private(set) var vid: String = ""
     private var item: FeedItem?
     private(set) var isActivePage = false
+    /// 是否真的已经在播放（决定什么时候撤掉静图）
+    private var playingStarted = false
 
     var onLike: ((String) -> Void)?
     var onSave: ((String) -> Void)?
@@ -172,6 +168,11 @@ final class PageVideoView: UIView {
         frameView.backgroundColor = .clear
         frameView.alpha = 0
         addSubview(frameView)
+
+        bottomFade.colors = [UIColor.clear.cgColor,
+                             UIColor.black.withAlphaComponent(0.55).cgColor]
+        bottomFade.locations = [0, 1]
+        layer.addSublayer(bottomFade)
 
         barBg.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         barFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
@@ -203,7 +204,6 @@ final class PageVideoView: UIView {
         authorRow.addSubview(authorDot)
         authorName.textColor = .white
         authorName.font = .systemFont(ofSize: 15.5, weight: .semibold)
-        addShadow(authorName)
         authorRow.addSubview(authorName)
         authorRow.onTap = { [weak self] in
             guard let a = self?.item?.authorId else { return }
@@ -214,7 +214,6 @@ final class PageVideoView: UIView {
         captionLabel.textColor = .white
         captionLabel.font = .systemFont(ofSize: 14.5)
         captionLabel.numberOfLines = 2
-        addShadow(captionLabel)
         addSubview(captionLabel)
 
         displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
@@ -235,13 +234,6 @@ final class PageVideoView: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    private func addShadow(_ v: UIView) {
-        v.layer.shadowColor = UIColor.black.cgColor
-        v.layer.shadowOpacity = 0.5
-        v.layer.shadowRadius = 3
-        v.layer.shadowOffset = CGSize(width: 0, height: 1)
-    }
-
     // MARK: 绑定 / 解绑
 
     func bind(index: Int, item: FeedItem, player: AVPlayer, ready: Bool) {
@@ -256,6 +248,7 @@ final class PageVideoView: UIView {
 
         if vid != item.vid {
             vid = item.vid
+            playingStarted = false
             frameView.alpha = 0
             frameView.image = nil
             loadCover(item.coverURL)
@@ -299,9 +292,9 @@ final class PageVideoView: UIView {
                     guard let self else { return }
                     if self.isActivePage {
                         self.playerLayer.player?.play()
-                    } else {
-                        self.parkAtFirstFrame()
                     }
+                    // 非当前页什么都不做：不 seek、不播放，靠静图顶着
+                    self.updateStills()
                 }
             }
         }
@@ -319,24 +312,23 @@ final class PageVideoView: UIView {
 
     // MARK: 画面显示优先级
 
+    /// 唯一规则：只有「当前页 且 真的在播」才撤静图；其余时刻一律用静图盖住
     private func updateStills() {
-        // ① 真画面已上屏
-        if playerLayer.isReadyForDisplay {
-            if coverView.alpha != 0 { coverView.alpha = 0 }
-            if frameView.alpha != 0 { frameView.alpha = 0 }
-            return
-        }
-        // ② 服务端预生成的第一帧（最快、最稳）
-        // ③ 设备现场解出来的第一帧
-        if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
-            if frameView.image !== img { frameView.image = img }
-            if frameView.alpha != 1 { frameView.alpha = 1 }
-            if coverView.alpha != 0 { coverView.alpha = 0 }
+        let showStill = !(isActivePage && playingStarted)
+
+        if showStill {
+            if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
+                if frameView.image !== img { frameView.image = img }
+                if frameView.alpha != 1 { frameView.alpha = 1 }
+                if coverView.alpha != 0 { coverView.alpha = 0 }
+            } else {
+                if frameView.alpha != 0 { frameView.alpha = 0 }
+                if coverView.alpha != 1 { coverView.alpha = 1 }
+                requestServerFrame()
+            }
         } else {
-            // ④ 封面兜底
             if frameView.alpha != 0 { frameView.alpha = 0 }
-            if coverView.alpha != 1 { coverView.alpha = 1 }
-            requestServerFrame()
+            if coverView.alpha != 0 { coverView.alpha = 0 }
         }
     }
 
@@ -370,26 +362,25 @@ final class PageVideoView: UIView {
 
     func setActive(_ active: Bool) {
         isActivePage = active
+        playingStarted = false
         guard let p = playerLayer.player else { return }
         if active {
             p.play()
         } else {
+            // 关键：非当前页绝不 seek —— seek 会清空图层，而静图才是应该被看到的东西
             p.pause()
-            parkAtFirstFrame()
         }
         updateStills()
-    }
-
-    /// 停在第一帧位置；不揭静图，等 isReadyForDisplay 自己切
-    private func parkAtFirstFrame() {
-        guard let p = playerLayer.player else { return }
-        let t = CMTime(seconds: 0.05, preferredTimescale: 600)
-        p.seek(to: t, toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
     }
 
     func markReady() { updateStills() }
 
     private func tick(_ t: CMTime) {
+        // 真正开始出画面了，才允许撤掉静图
+        if isActivePage && !playingStarted && t.seconds > 0.12 {
+            playingStarted = true
+            updateStills()
+        }
         let dur = playerLayer.player?.currentItem?.duration.seconds ?? 0
         guard dur.isFinite, dur > 0 else { return }
         let p = max(0, min(1, t.seconds / dur))
@@ -464,6 +455,7 @@ final class PageVideoView: UIView {
         playerLayer.frame = bounds
         coverView.frame = bounds
         frameView.frame = bounds
+        bottomFade.frame = CGRect(x: 0, y: h - 300, width: w, height: 300)
         barBg.frame = CGRect(x: 0, y: h - 80, width: w, height: 1.5)
         barFill.frame = CGRect(x: 0, y: h - 80, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
