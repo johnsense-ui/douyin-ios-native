@@ -1,15 +1,17 @@
-﻿//
+//
 //  ProfileView.swift
 //  DouyinLocal
 //
 //  「我的」个人主页。
 //
-//  数据全部来自 App 内的操作（StateStore），
-//  不与本地原始 db 的任何数据合并。
+//  数据全部来自 App 内的操作（StateStore），不与本地原始 db 合并。
 //
 //  结构：
-//    头部：头像 + 昵称 + 关注/粉丝/获赞 数字
-//    Tab：喜欢 / 收藏 / 关注
+//    navBar（固定）
+//    ScrollView
+//      header（头像 + 关注/粉丝/喜欢）
+//      content（九宫格 / 关注列表）
+//    tabBar（固定在底部，不随内容滚动，避免点错）
 //
 
 import SwiftUI
@@ -22,8 +24,10 @@ struct ProfileView: View {
     @State private var likedVideos: [FeedItem] = []
     @State private var savedVideos: [FeedItem] = []
     @State private var followingAuthors: [Author] = []
-    @State private var loading = false
+
     @State private var playing: FeedItem?
+    /// 点击时锁定的播放列表（避免 tab 变化后播错列表）
+    @State private var playList: [FeedItem] = []
     @State private var authorTarget: AuthorTarget?
 
     private let columns = [
@@ -38,29 +42,26 @@ struct ProfileView: View {
 
             VStack(spacing: 0) {
                 navBar
+
                 ScrollView {
                     VStack(spacing: 0) {
                         header
-                        tabBar
                         content
                     }
                 }
                 .scrollIndicators(.hidden)
+
+                tabBar
             }
         }
         .preferredColorScheme(.dark)
-        .task { await load() }
-        .onChange(of: state.likedCount) { _, _ in
-            Task { await loadLiked() }
-        }
-        .onChange(of: state.savedCount) { _, _ in
-            Task { await loadSaved() }
-        }
-        .onChange(of: state.followingCount) { _, _ in
-            Task { await loadFollowing() }
-        }
+        .task { await loadAll() }
+        .onChange(of: state.likedCount) { _, _ in Task { await loadLiked() } }
+        .onChange(of: state.savedCount) { _, _ in Task { await loadSaved() } }
+        .onChange(of: state.followingCount) { _, _ in Task { await loadFollowing() } }
         .fullScreenCover(item: $playing) { item in
-            PlayerTargetView(targets: playbackList, startVid: item.vid,
+            PlayerTargetView(targets: playList,
+                             startVid: item.vid,
                              authorName: item.author)
         }
         .sheet(item: $authorTarget) { t in
@@ -93,23 +94,22 @@ struct ProfileView: View {
     // MARK: - 头部
 
     private var header: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 14) {
-                UserAvatar(name: "我的", size: 80)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("我的收藏夹")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(.white)
-                    HStack(spacing: 18) {
-                        stat(state.followingCount, "关注")
-                        stat(0, "粉丝")
-                        stat(state.likedCount, "喜欢")
-                    }
+        HStack(spacing: 14) {
+            UserAvatar(name: "我的", size: 76)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("我的收藏夹")
+                    .font(.system(size: 19, weight: .bold))
+                    .foregroundStyle(.white)
+                HStack(spacing: 18) {
+                    stat(state.followingCount, "关注")
+                    stat(0, "粉丝")
+                    stat(state.likedCount, "喜欢")
                 }
-                Spacer(minLength: 0)
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
+        .padding(.top, 4)
         .padding(.bottom, 14)
     }
 
@@ -124,7 +124,7 @@ struct ProfileView: View {
         }
     }
 
-    // MARK: - Tab
+    // MARK: - Tab（固定）
 
     private var tabBar: some View {
         HStack(spacing: 0) {
@@ -132,14 +132,17 @@ struct ProfileView: View {
             tabItem(1, "收藏", state.savedCount)
             tabItem(2, "关注", state.followingCount)
         }
-        .overlay(alignment: .bottom) {
+        .frame(height: 46)
+        .background(Color.black)
+        .overlay(alignment: .top) {
             Divider().background(Color.white.opacity(0.12))
         }
     }
 
     private func tabItem(_ i: Int, _ title: String, _ n: Int) -> some View {
         Button {
-            withAnimation(.easeOut(duration: 0.16)) { tab = i }
+            guard tab != i else { return }
+            withAnimation(.easeOut(duration: 0.14)) { tab = i }
         } label: {
             VStack(spacing: 5) {
                 HStack(spacing: 4) {
@@ -157,9 +160,8 @@ struct ProfileView: View {
                     .fill(tab == i ? Color.white : .clear)
                     .frame(width: 20, height: 2)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -174,39 +176,42 @@ struct ProfileView: View {
             } else {
                 VStack(spacing: 0) {
                     ForEach(followingAuthors) { a in
-                        Button {
-                            authorTarget = AuthorTarget(id: a.authorId)
-                        } label: {
-                            HStack(spacing: 12) {
-                                UserAvatar(name: a.displayName, size: 48)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(a.displayName)
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                    Text("\(FeedItem.formatCount(a.followerCount)) 粉丝 · \(a.videoCount) 作品")
-                                        .font(.system(size: 12))
-                                        .foregroundStyle(Theme.textTertiary)
+                        HStack(spacing: 12) {
+                            Button {
+                                authorTarget = AuthorTarget(id: a.authorId)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    UserAvatar(name: a.displayName, size: 48)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(a.displayName)
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(.white)
+                                        Text("\(FeedItem.formatCount(a.followerCount)) 粉丝 · \(a.videoCount) 作品")
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(Theme.textTertiary)
+                                    }
+                                    Spacer(minLength: 0)
                                 }
-                                Spacer()
-                                Button {
-                                    state.toggleFollow(a.authorId)
-                                } label: {
-                                    Text("已关注")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundStyle(.white.opacity(0.75))
-                                        .padding(.horizontal, 14)
-                                        .frame(height: 30)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(.white.opacity(0.3))
-                                        )
-                                }
-                                .buttonStyle(.plain)
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
+                            .buttonStyle(.plain)
+
+                            Button {
+                                state.toggleFollow(a.authorId)
+                            } label: {
+                                Text("已关注")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.75))
+                                    .padding(.horizontal, 14)
+                                    .frame(height: 30)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 4)
+                                            .stroke(.white.opacity(0.3))
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 9)
                     }
                 }
             }
@@ -217,7 +222,11 @@ struct ProfileView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(list) { item in
-                        Button { playing = item } label: {
+                        Button {
+                            // 关键：先锁定列表，再打开播放页
+                            playList = list
+                            playing = item
+                        } label: {
                             GeometryReader { geo in
                                 ZStack {
                                     if let u = item.coverURL {
@@ -248,6 +257,7 @@ struct ProfileView: View {
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.bottom, 20)
             }
         }
     }
@@ -265,13 +275,9 @@ struct ProfileView: View {
         .padding(.top, 90)
     }
 
-    private var playbackList: [FeedItem] {
-        tab == 0 ? likedVideos : savedVideos
-    }
-
     // MARK: - 数据
 
-    private func load() async {
+    private func loadAll() async {
         async let a: () = loadLiked()
         async let b: () = loadSaved()
         async let c: () = loadFollowing()
@@ -281,30 +287,24 @@ struct ProfileView: View {
     private func loadLiked() async {
         let ids = state.likedIDs
         guard !ids.isEmpty else { likedVideos = []; return }
-        do {
-            likedVideos = try await APIClient.shared.videos(byIDs: ids).items
-        } catch {
-            print("loadLiked:", error)
+        if let r = try? await APIClient.shared.videos(byIDs: ids) {
+            likedVideos = r.items
         }
     }
 
     private func loadSaved() async {
         let ids = state.savedIDs
         guard !ids.isEmpty else { savedVideos = []; return }
-        do {
-            savedVideos = try await APIClient.shared.videos(byIDs: ids).items
-        } catch {
-            print("loadSaved:", error)
+        if let r = try? await APIClient.shared.videos(byIDs: ids) {
+            savedVideos = r.items
         }
     }
 
     private func loadFollowing() async {
         let ids = state.followingIDs
         guard !ids.isEmpty else { followingAuthors = []; return }
-        do {
-            followingAuthors = try await APIClient.shared.authorsByIDs(ids).items
-        } catch {
-            print("loadFollowing:", error)
+        if let r = try? await APIClient.shared.authorsByIDs(ids) {
+            followingAuthors = r.items
         }
     }
 }
