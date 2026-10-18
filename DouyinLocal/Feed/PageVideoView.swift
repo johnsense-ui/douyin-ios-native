@@ -257,6 +257,7 @@ final class PageVideoView: UIView {
         if vid != item.vid {
             vid = item.vid
             playingStarted = false
+            isActivePage = false        // 换了视频，激活态重置，允许重新激活
             frameView.alpha = 0
             frameView.image = nil
             backdropView.image = nil
@@ -302,8 +303,9 @@ final class PageVideoView: UIView {
                 guard it.status == .readyToPlay else { return }
                 DispatchQueue.main.async {
                     guard let self else { return }
-                    if self.isActivePage {
-                        self.playerLayer.player?.play()
+                    // 幂等：已经在播就不要重复 play，否则 AVQueuePlayer 会切回队首
+                    if self.isActivePage, let p = self.playerLayer.player, p.rate <= 0 {
+                        p.play()
                     }
                     // 非当前页什么都不做：不 seek、不播放，靠静图顶着
                     self.updateStills()
@@ -382,14 +384,25 @@ final class PageVideoView: UIView {
     // MARK: 播放状态
 
     func setActive(_ active: Bool) {
+        // 幂等：状态没变就不重复触发（重复 play 会让画面跳回第一帧）
+        if active && isActivePage {
+            // 已经是当前页了，不要再触发一次播放
+            return
+        }
         isActivePage = active
-        playingStarted = false
-        guard let p = playerLayer.player else { return }
+        guard let p = playerLayer.player else {
+            updateStills()
+            return
+        }
         if active {
-            p.play()
+            if !playingStarted {
+                p.play()
+                // playingStarted 由 tick 在真的有画面后置 true
+            }
         } else {
-            // 关键：非当前页绝不 seek —— seek 会清空图层，而静图才是应该被看到的东西
             p.pause()
+            // 关键：非当前页绝不 seek —— seek 会清空图层，而静图才是应该被看到的东西
+            playingStarted = false
         }
         updateStills()
     }
