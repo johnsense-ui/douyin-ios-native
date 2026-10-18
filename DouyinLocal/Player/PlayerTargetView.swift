@@ -2,16 +2,14 @@
 //  PlayerTargetView.swift
 //  DouyinLocal
 //
-//  通用「竖滑播放」页面。
-//  作者主页九宫格、搜索、我的（喜欢/收藏）都用它。
+//  通用竖滑播放页。作者主页九宫格、搜索结果、我的（喜欢/收藏）都用它。
+//  默认有声，不提供静音开关。
 //
 
 import SwiftUI
 
 struct PlayerTargetView: View {
-    /// 要播放的列表
     let targets: [FeedItem]
-    /// 从哪条开始
     let startVid: String
     let authorName: String
 
@@ -22,7 +20,6 @@ struct PlayerTargetView: View {
     @ObservedObject private var state = StateStore.shared
 
     @State private var index = 0
-    @State private var muted = true
     @State private var paused = false
     @State private var showAuthor = false
 
@@ -37,17 +34,17 @@ struct PlayerTargetView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.textTertiary)
             } else {
-                if index < items.count, let u = items[index].coverURL {
-                    CachedAsyncImage(url: u).scaledToFill().ignoresSafeArea()
-                }
-
                 PlayerStage(items: items,
                             pool: pool,
                             index: $index,
                             paused: paused,
                             onTap: {
                                 paused.toggle()
-                                paused ? pool.pause() : pool.resume()
+                                if paused {
+                                    pool.pause()
+                                } else if index < items.count {
+                                    pool.resume(items[index].vid)
+                                }
                             },
                             onDoubleTap: { loc in
                                 guard index < items.count else { return }
@@ -80,9 +77,11 @@ struct PlayerTargetView: View {
                                     Text(item.caption)
                                         .font(.system(size: 14))
                                         .foregroundStyle(.white)
-                                        .lineLimit(3)
+                                        .lineLimit(2)
                                 }
                             }
+                            .frame(height: 88, alignment: .bottom)
+
                             Spacer(minLength: 0)
                             VStack(spacing: 18) {
                                 ActionButton(systemImage: "heart.fill",
@@ -100,7 +99,7 @@ struct PlayerTargetView: View {
                             .frame(width: 58)
                         }
                         .padding(.horizontal, 14)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 44)
                     }
                     .allowsHitTesting(true)
                 }
@@ -113,7 +112,7 @@ struct PlayerTargetView: View {
                 }
             }
 
-            // 关闭按钮（右上，明显位置）
+            // 关闭按钮
             VStack {
                 HStack {
                     Spacer()
@@ -121,24 +120,26 @@ struct PlayerTargetView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.white)
-                            .frame(width: 32, height: 32)
-                            .background(Circle().fill(.black.opacity(0.45)))
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(.black.opacity(0.5)))
                     }
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 52)
+                .padding(.top, 54)
                 Spacer()
             }
         }
         .statusBarHidden(true)
         .preferredColorScheme(.dark)
         .onAppear {
-            pool.setMuted(muted)
             if let i = items.firstIndex(where: { $0.vid == startVid }) {
                 index = i
             }
-            currentPageSetup()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                guard !items.isEmpty else { return }
+                pool.focus(on: items, index: min(index, items.count - 1))
+            }
         }
         .onChange(of: index) { _, new in
             guard new < items.count else { return }
@@ -149,13 +150,6 @@ struct PlayerTargetView: View {
             if index < items.count {
                 AuthorView(authorId: items[index].authorId)
             }
-        }
-    }
-
-    private func currentPageSetup() {
-        guard !items.isEmpty else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            pool.focus(on: items, index: min(index, items.count - 1))
         }
     }
 }
