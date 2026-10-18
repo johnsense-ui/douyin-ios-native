@@ -22,13 +22,33 @@ final class ImageCache {
         cache.object(forKey: url as NSURL)
     }
 
-    /// 预取一批封面（后台下载并缓存，不保证顺序）
+    /// 正在下载的 url（避免同一张图重复请求）
+    private var inflight = Set<String>()
+    private let inflightLock = NSLock()
+
+    /// 预取一批图片（后台下载并缓存，不保证顺序；同一 url 只请求一次）
     func prefetch(_ urls: [URL]) {
         for url in urls {
             if cache.object(forKey: url as NSURL) != nil { continue }
+
+            let key = url.absoluteString
+            inflightLock.lock()
+            if inflight.contains(key) {
+                inflightLock.unlock()
+                continue
+            }
+            inflight.insert(key)
+            inflightLock.unlock()
+
             URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let self else { return }
+                defer {
+                    self.inflightLock.lock()
+                    self.inflight.remove(key)
+                    self.inflightLock.unlock()
+                }
                 guard let data, let img = UIImage(data: data) else { return }
-                self?.set(url, img)
+                self.set(url, img)
             }.resume()
         }
     }
@@ -36,6 +56,10 @@ final class ImageCache {
     func set(_ url: URL, _ img: UIImage) {
         let cost = Int(img.size.width * img.size.height * 4)
         cache.setObject(img, forKey: url as NSURL, cost: cost)
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .douyinImageCached,
+                                            object: url.absoluteString)
+        }
     }
 }
 
@@ -75,4 +99,9 @@ struct CachedAsyncImage: View {
             // 静默失败，显示灰底
         }
     }
+}
+
+extension Notification.Name {
+    /// object 是 url.absoluteString
+    static let douyinImageCached = Notification.Name("douyin.image.cached")
 }
