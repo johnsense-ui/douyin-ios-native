@@ -1,4 +1,4 @@
-//
+﻿//
 //  CachedAsyncImage.swift
 //  DouyinLocal
 //
@@ -20,6 +20,17 @@ final class ImageCache {
 
     func get(_ url: URL) -> UIImage? {
         cache.object(forKey: url as NSURL)
+    }
+
+    /// 预取一批封面（后台下载并缓存，不保证顺序）
+    func prefetch(_ urls: [URL]) {
+        for url in urls {
+            if cache.object(forKey: url as NSURL) != nil { continue }
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                guard let data, let img = UIImage(data: data) else { return }
+                self?.set(url, img)
+            }.resume()
+        }
     }
 
     func set(_ url: URL, _ img: UIImage) {
