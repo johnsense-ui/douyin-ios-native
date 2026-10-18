@@ -1,4 +1,4 @@
-﻿//
+//
 //  APIClient.swift
 //  DouyinLocal
 //
@@ -92,16 +92,34 @@ final class APIClient {
 
     // MARK: - 状态
 
-    func pushState(liked: [String: Bool] = [:], saved: [String: Bool] = [:]) async {
+    func pushState(liked: [String: Bool] = [:],
+                   saved: [String: Bool] = [:],
+                   following: [String: Bool] = [:]) async {
         var body: [String: [String: Int]] = [:]
         if !liked.isEmpty { body["liked"] = liked.mapValues { $0 ? 1 : 0 } }
         if !saved.isEmpty { body["saved"] = saved.mapValues { $0 ? 1 : 0 } }
+        if !following.isEmpty { body["following"] = following.mapValues { $0 ? 1 : 0 } }
         guard !body.isEmpty else { return }
         var req = URLRequest(url: Self.baseURL.appendingPathComponent("api2/state"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         _ = try? await session.data(for: req)
+    }
+
+    /// 拉取服务端保存的状态
+    func pullState() async -> StatePayload? {
+        try? await get("api2/state", [:])
+    }
+
+    /// 按 vid 批量取视频（「我的」页面用）
+    func videos(byIDs ids: [String]) async throws -> FeedItemsPage {
+        try await get("api2/videos", ["ids": ids.joined(separator: ",")])
+    }
+
+    /// 按 authorId 批量取作者（「我的关注」用）
+    func authorsByIDs(_ ids: [String]) async throws -> AuthorList {
+        try await get("api2/authors", ["ids": ids.joined(separator: ",")])
     }
 }
 
