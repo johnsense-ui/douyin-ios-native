@@ -20,60 +20,52 @@ jobs:
       - name: 环境
         run: |
           xcodebuild -version
+          ls -la
 
-      - name: 编译并提取错误
+      - name: 编译
+        id: build
+        continue-on-error: true
         run: |
+          set -x
           cd swift
-          set +e
-          xcodebuild build \
-            -project DouyinLocal.xcodeproj \
-            -scheme DouyinLocal \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build \
-            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
-            > build.log 2>&1
-          rc=$?
-          echo "exit=$rc"
-          echo "===================== ERRORS ====================="
-          grep -n "error:" build.log | head -40 || echo "(无 error: 行)"
-          echo "===================== FAILED CMD ================="
-          grep -n -A6 "The following build commands failed" build.log | head -30 || true
-          echo "===================== LAST 40 ===================="
-          tail -40 build.log
-          # 把精简日志写进 artifact 之外的固定名字
-          grep -n "error:" build.log > errors.txt || true
-          tail -200 build.log > tail.txt || true
-          exit $rc
+          xcodebuild -list -project DouyinLocal.xcodeproj
+          echo "---- start build ----"
+          xcodebuild build -project DouyinLocal.xcodeproj -scheme DouyinLocal -configuration Release -sdk iphoneos -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" > ../build.log 2>&1
+          echo "xcodebuild exit=$?"
+          set +x
+          echo "===== ERRORS ====="
+          grep "error:" ../build.log | head -40 || true
+          echo "===== TAIL ====="
+          tail -50 ../build.log || true
+          echo "===== SIZE ====="
+          wc -l ../build.log || true
 
-      - name: 上传错误日志
+      - name: 上传编译日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-diagnostics
-          path: |
-            swift/errors.txt
-            swift/tail.txt
-            swift/build.log
+          name: build-log
+          path: build.log
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
 
-      - name: 打包 unsigned IPA
+      - name: 打包 IPA
+        if: steps.build.outcome == 'success'
         run: |
           set -e
           cd swift
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "APP=$APP"
+          if [ -z "$APP" ]; then echo "no .app found"; exit 1; fi
           rm -rf out && mkdir -p out/Payload
           cp -R "$APP" out/Payload/
-          cd out && zip -qry ../DouyinLocal-unsigned.ipa Payload
+          ( cd out && zip -qry ../../DouyinLocal-unsigned.ipa Payload )
           ls -lh ../DouyinLocal-unsigned.ipa
 
       - name: 上传 IPA
+        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
-          path: swift/DouyinLocal-unsigned.ipa
+          path: DouyinLocal-unsigned.ipa
           retention-days: 30
