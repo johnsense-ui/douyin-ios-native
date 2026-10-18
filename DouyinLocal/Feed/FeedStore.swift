@@ -3,6 +3,7 @@
 //  DouyinLocal
 //
 //  推荐流数据源：分页拉取 + 无限加载。
+//  条数与推荐算法从 AppSettings 读取。
 //
 
 import Foundation
@@ -17,8 +18,11 @@ final class FeedStore: ObservableObject {
 
     private var seed: String = ""
     private var offset = 0
-    private let limit = 12
     private var endReached = false
+
+    private var limit: Int {
+        max(4, min(30, AppSettings.shared.pageSize))
+    }
 
     func reload() async {
         seed = ""
@@ -34,9 +38,11 @@ final class FeedStore: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            let page = try await APIClient.shared.feed(seed: seed.isEmpty ? nil : seed,
-                                                       offset: offset,
-                                                       limit: limit)
+            let page = try await APIClient.shared.feed(
+                seed: seed.isEmpty ? nil : seed,
+                offset: offset,
+                limit: limit,
+                algo: AppSettings.shared.algo.apiValue)
             if seed.isEmpty { seed = page.seed }
             total = page.total
             if page.items.isEmpty {
@@ -48,7 +54,6 @@ final class FeedStore: ObservableObject {
             errorText = nil
         } catch {
             errorText = error.localizedDescription
-            // 失败时退避，避免疯狂重试
             try? await Task.sleep(nanoseconds: 1_500_000_000)
         }
     }
