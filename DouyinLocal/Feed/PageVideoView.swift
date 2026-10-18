@@ -118,6 +118,8 @@ final class PageVideoView: UIView {
     private let coverView = UIImageView()
     /// 真实第 0 帧（优先于封面）
     private let frameView = UIImageView()
+    /// 底衬：同一帧放大填满并压暗，用来消除 letterbox 黑边（不裁切主画面）
+    private let backdropView = UIImageView()
     /// 底部渐变：替代文字阴影，一个图层解决可读性（比 5 处阴影便宜得多）
     private let bottomFade = CAGradientLayer()
 
@@ -156,8 +158,14 @@ final class PageVideoView: UIView {
         backgroundColor = .black
         clipsToBounds = true
 
+        // 底衬先入（最底层），视频层盖在它上面
+        backdropView.contentMode = .scaleAspectFill
+        backdropView.backgroundColor = .black
+        backdropView.alpha = 0
+        addSubview(backdropView)
+
         playerLayer.videoGravity = .resizeAspect
-        playerLayer.backgroundColor = UIColor.black.cgColor
+        playerLayer.backgroundColor = UIColor.clear.cgColor   // 黑边透出底衬
         layer.addSublayer(playerLayer)
 
         coverView.contentMode = .scaleAspectFit
@@ -251,9 +259,13 @@ final class PageVideoView: UIView {
             playingStarted = false
             frameView.alpha = 0
             frameView.image = nil
+            backdropView.image = nil
+            backdropView.alpha = 0
             loadCover(item.coverURL)
             if let img = serverFrame() ?? FramePrefetcher.shared.cached(item.vid) {
                 frameView.image = img
+                backdropView.image = img
+                backdropView.alpha = 0.38
             }
         }
 
@@ -319,6 +331,10 @@ final class PageVideoView: UIView {
         if showStill {
             if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
                 if frameView.image !== img { frameView.image = img }
+                if backdropView.image !== img {
+                    backdropView.image = img
+                    if backdropView.alpha == 0 { backdropView.alpha = 0.38 }
+                }
                 if frameView.alpha != 1 { frameView.alpha = 1 }
                 if coverView.alpha != 0 { coverView.alpha = 0 }
             } else {
@@ -327,8 +343,13 @@ final class PageVideoView: UIView {
                 requestServerFrame()
             }
         } else {
-            if frameView.alpha != 0 { frameView.alpha = 0 }
-            if coverView.alpha != 0 { coverView.alpha = 0 }
+            // 淡出而不是硬切，避免静图→视频那一瞬间「跳」一下
+            if frameView.alpha != 0 || coverView.alpha != 0 {
+                UIView.animate(withDuration: 0.18, delay: 0, options: [.curveEaseOut]) {
+                    self.frameView.alpha = 0
+                    self.coverView.alpha = 0
+                }
+            }
         }
     }
 
