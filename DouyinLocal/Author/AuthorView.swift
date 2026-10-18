@@ -1,4 +1,4 @@
-﻿//
+//
 //  AuthorView.swift
 //  DouyinLocal
 //
@@ -32,7 +32,7 @@ struct AuthorView: View {
                 Color.black.ignoresSafeArea()
 
                 ScrollView {
-                    LazyVStack(pinnedViews: [.sectionHeaders], spacing: 0) {
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                         Section {
                             grid
                         } header: {
@@ -48,7 +48,6 @@ struct AuthorView: View {
             }
             .navigationTitle(author?.displayName ?? "作者主页")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.visible, forHTTPHeaderField: "x")   // 占位
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
