@@ -67,6 +67,10 @@ final class AppSettings: ObservableObject {
     @Published var autoScan: Bool {
         didSet { d.set(autoScan, forKey: "set.autoScan") }
     }
+    /// 视频本地缓存上限（MB），0 表示不缓存
+    @Published var videoCacheMB: Int {
+        didSet { d.set(videoCacheMB, forKey: "set.videoCacheMB") }
+    }
 
     private let d = UserDefaults.standard
 
@@ -79,6 +83,7 @@ final class AppSettings: ObservableObject {
             "set.pageSize": 12,
             "set.longPressSpeed": true,
             "set.autoScan": true,
+            "set.videoCacheMB": 300,
         ])
         autoplay = ud.bool(forKey: "set.autoplay")
         loopOne = ud.bool(forKey: "set.loopOne")
@@ -86,6 +91,7 @@ final class AppSettings: ObservableObject {
         pageSize = ud.integer(forKey: "set.pageSize")
         longPressSpeed = ud.bool(forKey: "set.longPressSpeed")
         autoScan = ud.bool(forKey: "set.autoScan")
+        videoCacheMB = ud.integer(forKey: "set.videoCacheMB")
     }
 
     /// 自动连播和单条循环互斥
