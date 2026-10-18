@@ -25,6 +25,7 @@
 		A1B2C3D40000000000000903 /* PlayerTargetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000902 /* PlayerTargetView.swift */; };
 		A1B2C3D40000000000000951 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000950 /* AppSettings.swift */; };
 		A1B2C3D40000000000000953 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000952 /* SettingsView.swift */; };
+		A1B2C3D40000000000000971 /* PageVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000970 /* PageVideoView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		A1B2C3D40000000000000902 /* PlayerTargetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTargetView.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000950 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000952 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000970 /* PageVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageVideoView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -127,6 +129,7 @@
 				A1B2C3D40000000000000103 /* FeedView.swift */,
 				A1B2C3D40000000000000104 /* FeedStore.swift */,
 				A1B2C3D40000000000000105 /* PlayerStage.swift */,
+				A1B2C3D40000000000000970 /* PageVideoView.swift */,
 			);
 			path = Feed;
 			sourceTree = "<group>";
@@ -277,6 +280,7 @@
 				A1B2C3D40000000000000903 /* PlayerTargetView.swift in Sources */,
 				A1B2C3D40000000000000951 /* AppSettings.swift in Sources */,
 				A1B2C3D40000000000000953 /* SettingsView.swift in Sources */,
+				A1B2C3D40000000000000971 /* PageVideoView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
