@@ -1,4 +1,4 @@
-//
+﻿//
 //  PageVideoView.swift
 //  DouyinLocal
 //
@@ -228,6 +228,9 @@ final class PageVideoView: UIView {
         NotificationCenter.default.addObserver(
             self, selector: #selector(frameBecameReady(_:)),
             name: .douyinFrameReady, object: nil)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(imageCached(_:)),
+            name: .douyinImageCached, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -256,7 +259,7 @@ final class PageVideoView: UIView {
             frameView.alpha = 0
             frameView.image = nil
             loadCover(item.coverURL)
-            if let img = FramePrefetcher.shared.cached(item.vid) {
+            if let img = serverFrame() ?? FramePrefetcher.shared.cached(item.vid) {
                 frameView.image = img
             }
         }
@@ -323,16 +326,36 @@ final class PageVideoView: UIView {
             if frameView.alpha != 0 { frameView.alpha = 0 }
             return
         }
-        // ② 真实第 0 帧
-        if let img = FramePrefetcher.shared.cached(vid) {
+        // ② 服务端预生成的第一帧（最快、最稳）
+        // ③ 设备现场解出来的第一帧
+        if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
             if frameView.image !== img { frameView.image = img }
             if frameView.alpha != 1 { frameView.alpha = 1 }
             if coverView.alpha != 0 { coverView.alpha = 0 }
         } else {
-            // ③ 封面兜底
+            // ④ 封面兜底
             if frameView.alpha != 0 { frameView.alpha = 0 }
             if coverView.alpha != 1 { coverView.alpha = 1 }
+            requestServerFrame()
         }
+    }
+
+    private func serverFrame() -> UIImage? {
+        guard let u = APIClient.frameURL(vid) else { return nil }
+        return ImageCache.shared.get(u)
+    }
+
+    /// 没缓存就拉一次（后台）
+    private func requestServerFrame() {
+        guard let u = APIClient.frameURL(vid) else { return }
+        ImageCache.shared.prefetch([u])
+    }
+
+    @objc private func imageCached(_ note: Notification) {
+        guard let s = note.object as? String,
+              let u = APIClient.frameURL(vid),
+              s == u.absoluteString else { return }
+        updateStills()
     }
 
     @objc private func frameBecameReady(_ note: Notification) {
