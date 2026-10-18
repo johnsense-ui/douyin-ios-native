@@ -1,4 +1,4 @@
-//
+﻿//
 //  APIClient.swift
 //  DouyinLocal
 //
@@ -68,16 +68,17 @@ final class APIClient {
 
     /// 作者作品，full=true 返回含视频地址的完整条目（可直接播放）
     func authorItems(_ authorId: String, offset: Int = 0,
-                     limit: Int = 30) async throws -> FeedAuthorPage {
+                     limit: Int = 30, sort: String = "new") async throws -> FeedAuthorPage {
         try await get("api2/author/\(authorId)",
-                      ["offset": "\(offset)", "limit": "\(limit)", "full": "1"])
+                      ["offset": "\(offset)", "limit": "\(limit)",
+                       "full": "1", "sort": sort])
     }
 
     func author(_ authorId: String, offset: Int = 0, limit: Int = 30,
-                full: Bool = false) async throws -> AuthorDetail {
+                full: Bool = false, sort: String = "new") async throws -> AuthorDetail {
         try await get("api2/author/\(authorId)",
                       ["offset": "\(offset)", "limit": "\(limit)",
-                       "full": full ? "1" : "0"])
+                       "full": full ? "1" : "0", "sort": sort])
     }
 
     func authors(offset: Int = 0, limit: Int = 50, q: String? = nil) async throws -> AuthorList {
@@ -86,8 +87,14 @@ final class APIClient {
         return try await get("api2/authors", d)
     }
 
-    func search(_ q: String, offset: Int = 0) async throws -> SearchResult {
-        try await get("api2/search", ["q": q, "offset": "\(offset)"])
+    func search(_ q: String, offset: Int = 0,
+                sort: String = "digg") async throws -> SearchResult {
+        try await get("api2/search", ["q": q, "offset": "\(offset)",
+                                      "videoLimit": "30", "sort": sort])
+    }
+
+    func suggest() async throws -> SuggestResult {
+        try await get("api2/suggest", [:])
     }
 
     // MARK: - 状态
