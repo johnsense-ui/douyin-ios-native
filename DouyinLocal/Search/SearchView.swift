@@ -1,4 +1,4 @@
-//
+﻿//
 //  SearchView.swift
 //  DouyinLocal
 //
@@ -13,8 +13,7 @@ struct SearchView: View {
     @State private var query = ""
     @State private var result: SearchResult?
     @State private var loading = false
-    @State private var author: Author?
-    @State private var playing: PlayerTarget?
+    @State private var route: SearchRoute?
     @State private var playItems: [FeedItem] = []
     @State private var errorText: String?
     @FocusState private var focused: Bool
@@ -55,11 +54,13 @@ struct SearchView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear { focused = true }
-        .fullScreenCover(item: $author) { a in
-            AuthorView(authorId: a.authorId)
-        }
-        .fullScreenCover(item: $playing) { t in
-            PlayerTargetView(targets: playItems, startVid: t.vid, authorName: t.author)
+        .fullScreenCover(item: $route) { r in
+            switch r {
+            case .author(let aid):
+                AuthorView(authorId: aid)
+            case .play(let t):
+                PlayerTargetView(targets: playItems, startVid: t.vid, authorName: t.author)
+            }
         }
     }
 
@@ -118,7 +119,7 @@ struct SearchView: View {
             if !r.authors.isEmpty {
                 sectionTitle("作者", r.authorTotal)
                 ForEach(r.authors) { a in
-                    Button { author = a } label: {
+                    Button { route = .author(a.authorId) } label: {
                         HStack(spacing: 12) {
                             UserAvatar(name: a.displayName, size: 46)
                             VStack(alignment: .leading, spacing: 3) {
@@ -212,9 +213,9 @@ struct SearchView: View {
                let item = r.items.first {
                 await MainActor.run {
                     playItems = r.items
-                    playing = PlayerTarget(authorId: item.authorId,
-                                           vid: item.vid,
-                                           author: item.author)
+                    route = .play(PlayerTarget(authorId: item.authorId,
+                                                         vid: item.vid,
+                                                         author: item.author))
                 }
             }
         }
@@ -249,4 +250,17 @@ struct PlayerTarget: Identifiable, Hashable {
     let vid: String
     let author: String
     var id: String { vid }
+}
+
+// MARK: - 二级页路由
+enum SearchRoute: Identifiable {
+    case author(String)
+    case play(PlayerTarget)
+
+    var id: String {
+        switch self {
+        case .author(let a): return "author-\(a)"
+        case .play(let t): return "play-\(t.vid)"
+        }
+    }
 }
