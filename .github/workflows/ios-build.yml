@@ -41,7 +41,6 @@ jobs:
 
       - name: 3-真正编译
         run: |
-          set -o pipefail
           xcodebuild \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
@@ -54,11 +53,19 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            build \
-            2>&1 | tee build.log
-          rc=${PIPESTATUS[0]}
-          echo "xcodebuild rc=$rc"
-          exit $rc
+            build > build.log 2>&1 || true
+
+          echo "=== rc / 结果 ==="
+          grep -E "BUILD (SUCCEEDED|FAILED)" build.log | tail -2 || echo "(none)"
+
+          # 把 error 行打成注解（check-run annotations 可通过 API 读）
+          grep -F "error:" build.log | head -20 | while read -r l; do
+            echo "::error title=swift::$l"
+          done
+          echo "::notice title=logsize::$(wc -l < build.log) lines"
+
+          # 用退出码决定成败
+          grep -q "BUILD SUCCEEDED" build.log
 
       - name: 把错误写进仓库文件（便于外部读取）
         if: always()
