@@ -1,4 +1,4 @@
-//
+﻿//
 //  ProfileView.swift
 //  DouyinLocal
 //
@@ -25,10 +25,9 @@ struct ProfileView: View {
     @State private var savedVideos: [FeedItem] = []
     @State private var followingAuthors: [Author] = []
 
-    @State private var playing: FeedItem?
+    @State private var route: ProfileRoute?
     /// 点击时锁定的播放列表（避免 tab 变化后播错列表）
     @State private var playList: [FeedItem] = []
-    @State private var authorTarget: AuthorTarget?
 
     private let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -59,13 +58,15 @@ struct ProfileView: View {
         .onChange(of: state.likedCount) { _, _ in Task { await loadLiked() } }
         .onChange(of: state.savedCount) { _, _ in Task { await loadSaved() } }
         .onChange(of: state.followingCount) { _, _ in Task { await loadFollowing() } }
-        .fullScreenCover(item: $playing) { item in
-            PlayerTargetView(targets: playList,
-                             startVid: item.vid,
-                             authorName: item.author)
-        }
-        .sheet(item: $authorTarget) { t in
-            AuthorView(authorId: t.id)
+        .fullScreenCover(item: $route) { r in
+            switch r {
+            case .play(let item):
+                PlayerTargetView(targets: playList,
+                                 startVid: item.vid,
+                                 authorName: item.author)
+            case .author(let t):
+                AuthorView(authorId: t.id)
+            }
         }
     }
 
@@ -178,7 +179,7 @@ struct ProfileView: View {
                     ForEach(followingAuthors) { a in
                         HStack(spacing: 12) {
                             Button {
-                                authorTarget = AuthorTarget(id: a.authorId)
+                                route = .author(AuthorTarget(id: a.authorId))
                             } label: {
                                 HStack(spacing: 12) {
                                     UserAvatar(name: a.displayName, size: 48)
@@ -225,7 +226,7 @@ struct ProfileView: View {
                         Button {
                             // 关键：先锁定列表，再打开播放页
                             playList = list
-                            playing = item
+                            route = .play(item)
                         } label: {
                             GeometryReader { geo in
                                 ZStack {
@@ -305,6 +306,19 @@ struct ProfileView: View {
         guard !ids.isEmpty else { followingAuthors = []; return }
         if let r = try? await APIClient.shared.authorsByIDs(ids) {
             followingAuthors = r.items
+        }
+    }
+}
+
+// MARK: - 二级页路由
+enum ProfileRoute: Identifiable {
+    case play(FeedItem)
+    case author(AuthorTarget)
+
+    var id: String {
+        switch self {
+        case .play(let i): return "play-\(i.vid)"
+        case .author(let a): return "author-\(a.id)"
         }
     }
 }
