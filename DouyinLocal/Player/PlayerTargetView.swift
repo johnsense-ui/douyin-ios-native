@@ -1,9 +1,12 @@
-﻿//
+//
 //  PlayerTargetView.swift
 //  DouyinLocal
 //
-//  通用竖滑播放页。作者主页九宫格、搜索结果、我的（喜欢/收藏）都用它。
-//  默认有声，不提供静音开关。
+//  通用竖滑播放页（作者主页九宫格、搜索结果、我的喜欢/收藏）。
+//
+//  注意：文案 / 右栏 / 进度条 由 PageVideoView 用 UIKit 绘制，
+//  这里**只放**关闭按钮和双击爱心。不要再画一套 SwiftUI 的 UI，
+//  否则会出现两层 UI 重叠（双爱心、双文案）。
 //
 
 import SwiftUI
@@ -21,7 +24,7 @@ struct PlayerTargetView: View {
 
     @State private var index = 0
     @State private var paused = false
-    @State private var showAuthor = false
+    @State private var authorTarget: AuthorTarget?
 
     private var items: [FeedItem] { targets }
 
@@ -38,71 +41,14 @@ struct PlayerTargetView: View {
                             pool: pool,
                             index: $index,
                             paused: paused,
-                            onTap: {
-                                paused.toggle()
-                                if paused {
-                                    pool.pause()
-                                } else if index < items.count {
-                                    pool.resume(items[index].vid)
-                                }
-                            },
-                            onDoubleTap: { loc in
-                                guard index < items.count else { return }
-                                hearts.pop(at: loc)
-                                let vid = items[index].vid
-                                if !state.isLiked(vid) { state.toggleLike(vid) }
-                            })
+                            onTap: handleTap,
+                            onDoubleTap: handleDoubleTap,
+                            onLike: { state.toggleLike($0) },
+                            onSave: { state.toggleSave($0) },
+                            onAuthor: { authorTarget = AuthorTarget(id: $0) })
                 .ignoresSafeArea()
 
                 ForEach(hearts.bursts) { $0 }
-
-                if index < items.count {
-                    let item = items[index]
-                    VStack {
-                        Spacer()
-                        HStack(alignment: .bottom, spacing: 10) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Button { showAuthor = true } label: {
-                                    HStack(spacing: 9) {
-                                        UserAvatar(name: item.author, size: 38)
-                                        Text("@\(item.author)")
-                                            .font(.system(size: 15.5, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                .buttonStyle(.plain)
-
-                                if !item.caption.isEmpty {
-                                    Text(item.caption)
-                                        .font(.system(size: 14))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(2)
-                                }
-                            }
-                            .frame(height: 88, alignment: .bottom)
-
-                            Spacer(minLength: 0)
-                            VStack(spacing: 18) {
-                                ActionButton(systemImage: "heart.fill",
-                                             label: item.diggText,
-                                             tint: state.isLiked(item.vid) ? Theme.likeRed : .white,
-                                             filled: state.isLiked(item.vid)
-                                ) { state.toggleLike(item.vid) }
-
-                                ActionButton(systemImage: "bookmark.fill",
-                                             label: "收藏",
-                                             tint: state.isSaved(item.vid) ? .yellow : .white,
-                                             filled: state.isSaved(item.vid)
-                                ) { state.toggleSave(item.vid) }
-                            }
-                            .frame(width: 58)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, 44)
-                    }
-                    .allowsHitTesting(true)
-                }
 
                 if paused {
                     Image(systemName: "play.fill")
@@ -112,7 +58,6 @@ struct PlayerTargetView: View {
                 }
             }
 
-            // 关闭按钮
             VStack {
                 HStack {
                     Spacer()
@@ -146,10 +91,24 @@ struct PlayerTargetView: View {
             pool.focus(on: items, index: new)
             paused = false
         }
-        .fullScreenCover(isPresented: $showAuthor) {
-            if index < items.count {
-                AuthorView(authorId: items[index].authorId)
-            }
+        .fullScreenCover(item: $authorTarget) { t in
+            AuthorView(authorId: t.id)
         }
+    }
+
+    private func handleTap() {
+        paused.toggle()
+        if paused {
+            pool.pause()
+        } else if index < items.count {
+            pool.resume(items[index].vid)
+        }
+    }
+
+    private func handleDoubleTap(_ loc: CGPoint) {
+        guard index < items.count else { return }
+        hearts.pop(at: loc)
+        let vid = items[index].vid
+        if !state.isLiked(vid) { state.toggleLike(vid) }
     }
 }
