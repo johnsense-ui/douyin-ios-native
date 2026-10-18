@@ -2,108 +2,17 @@
 //  PlayerStage.swift
 //  DouyinLocal
 //
-//  原生分页滚动 + 每页一个视频画面。
+//  分页滚动容器。
 //
-//  对齐抖音的行为：
-//   · 手指拖动时，整页（视频画面）跟着 1:1 移动
-//   · 拖动过程中**旧视频继续播放**，新视频停在第一帧（不播）
-//   · 落位（吸附完成）之后才切换播放：新视频开始播，旧视频暂停
-//   · 视频按原始比例完整显示（resizeAspect），不裁切不拉伸
-//   · 每页盖一层封面，等 AVPlayerLayer.isReadyForDisplay 变 true 才揭开
-//     —— 解决「有声音没画面」的黑屏
+//  关键顺序（这是之前黑屏的根因）：
+//    先 pool.keep() 扩大保留窗口，再 syncPages() 重排页面
+//    —— 反过来的话播放器池会在窗口还没更新时判定「无可用槽」，
+//       从而抢占正在播放的那个播放器，导致第 4 个视频起黑屏。
 //
 
 import SwiftUI
 import UIKit
 import AVFoundation
-
-// MARK: - 单页视频视图
-
-final class PageVideoView: UIView {
-    let playerLayer = AVPlayerLayer()
-    private let coverView = UIImageView()
-    private var displayObs: NSKeyValueObservation?
-
-    var pageIndex: Int = -1
-    private(set) var vid: String = ""
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .black
-        clipsToBounds = true
-
-        playerLayer.videoGravity = .resizeAspect
-        playerLayer.backgroundColor = UIColor.black.cgColor
-        layer.addSublayer(playerLayer)
-
-        coverView.contentMode = .scaleAspectFit
-        coverView.backgroundColor = .clear
-        coverView.clipsToBounds = true
-        addSubview(coverView)
-
-        // 画面真正可显示时才揭开封面（这是防黑屏的关键）
-        displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
-            guard l.isReadyForDisplay else { return }
-            DispatchQueue.main.async { self?.revealVideo() }
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.frame = bounds
-        coverView.frame = bounds
-        CATransaction.commit()
-    }
-
-    func bind(index: Int, item: FeedItem, player: AVPlayer, ready: Bool) {
-        pageIndex = index
-        if vid != item.vid {
-            vid = item.vid
-            playerLayer.player = player
-            coverView.alpha = 1
-            loadCover(item.coverURL)
-        } else if playerLayer.player !== player {
-            playerLayer.player = player
-        }
-        if playerLayer.isReadyForDisplay {
-            coverView.alpha = 0
-        } else if !ready {
-            coverView.alpha = 1
-        }
-    }
-
-    func markReady() { revealVideo() }
-
-    private func revealVideo() {
-        guard coverView.alpha != 0 else { return }
-        UIView.animate(withDuration: 0.12) { self.coverView.alpha = 0 }
-    }
-
-    private func loadCover(_ url: URL?) {
-        coverView.image = nil
-        guard let url else { return }
-        if let cached = ImageCache.shared.get(url) {
-            coverView.image = cached
-            return
-        }
-        let targetVid = vid
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            guard let data, let img = UIImage(data: data) else { return }
-            ImageCache.shared.set(url, img)
-            DispatchQueue.main.async {
-                if self.vid == targetVid, self.coverView.alpha > 0 {
-                    self.coverView.image = img
-                }
-            }
-        }.resume()
-    }
-}
-
-// MARK: - SwiftUI 包装
 
 struct PlayerStage: UIViewRepresentable {
     let items: [FeedItem]
@@ -112,8 +21,10 @@ struct PlayerStage: UIViewRepresentable {
     let paused: Bool
     var onTap: () -> Void = {}
     var onDoubleTap: (CGPoint) -> Void = { _ in }
-    /// 拖动偏移（单位：页），0 表示已归位
-    var onDelta: (CGFloat) -> Void = { _ in }
+    var onLike: (String) -> Void = { _ in }
+    var onSave: (String) -> Void = { _ in }
+    var onAuthor: (String) -> Void = { _ in }
+    var onSwipeLeft: (Int) -> Void = { _ in }
 
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
@@ -140,12 +51,15 @@ struct PlayerStage: UIViewRepresentable {
         }
         v.onTap = { DispatchQueue.main.async { onTap() } }
         v.onDoubleTap = { p in DispatchQueue.main.async { onDoubleTap(p) } }
-        v.onDelta = { d in DispatchQueue.main.async { onDelta(d) } }
+        v.onLike = { vid in DispatchQueue.main.async { onLike(vid) } }
+        v.onSave = { vid in DispatchQueue.main.async { onSave(vid) } }
+        v.onAuthor = { aid in DispatchQueue.main.async { onAuthor(aid) } }
+        v.onSwipeLeft = { i in DispatchQueue.main.async { onSwipeLeft(i) } }
         v.pool = pool
     }
 }
 
-// MARK: - 滚动容器
+// MARK: - 容器
 
 final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     private let scrollView = UIScrollView()
@@ -165,17 +79,17 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
     private(set) var items: [FeedItem] = []
     private(set) var itemsCount = 0
-    /// 正在播放的页（只在吸附完成后更新）
     private(set) var settledPage = 0
-    /// 当前离屏幕中心最近的一页（拖动中会变，用于分配三页）
     private var centerPage = 0
 
     var onIndexChange: ((Int) -> Void)?
-    var onDelta: ((CGFloat) -> Void)?
     var onTap: (() -> Void)?
     var onDoubleTap: ((CGPoint) -> Void)?
+    var onLike: ((String) -> Void)?
+    var onSave: ((String) -> Void)?
+    var onAuthor: ((String) -> Void)?
+    var onSwipeLeft: ((Int) -> Void)?
 
-    private var lastDelta: CGFloat = 99
     private var pausedNow = false
     private var adjustingRate = false
 
@@ -195,6 +109,9 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
         for p in pages {
             p.isHidden = true
+            p.onLike = { [weak self] v in self?.onLike?(v) }
+            p.onSave = { [weak self] v in self?.onSave?(v) }
+            p.onAuthor = { [weak self] a in self?.onAuthor?(a) }
             scrollView.addSubview(p)
         }
 
@@ -207,7 +124,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         let long = UILongPressGestureRecognizer(target: self, action: #selector(handleLong(_:)))
         long.minimumPressDuration = 0.28
 
-        for g in [single, double, long] as [UIGestureRecognizer] {
+        let swipe = UISwipeGestureRecognizer(target: self, action: #selector(handleSwipeLeft))
+        swipe.direction = .left
+
+        for g in [single, double, long, swipe] as [UIGestureRecognizer] {
             g.delegate = self
             g.cancelsTouchesInView = false
             scrollView.addGestureRecognizer(g)
@@ -222,6 +142,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
     @objc private func handleDouble(_ g: UITapGestureRecognizer) {
         onDoubleTap?(g.location(in: self))
+    }
+
+    @objc private func handleSwipeLeft() {
+        onSwipeLeft?(settledPage)
     }
 
     @objc private func handleLong(_ g: UILongPressGestureRecognizer) {
@@ -247,7 +171,17 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         true
     }
 
-    // MARK: 布局 / 配置
+    /// 点在按钮/可点行上时，不要让单击手势触发暂停
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        var v = touch.view
+        while let cur = v {
+            if cur is UIControl { return false }
+            v = cur.superview
+        }
+        return true
+    }
+
+    // MARK: 布局
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -275,20 +209,19 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         layoutIfNeeded()
         scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(settledPage) * bounds.height),
                                     animated: false)
-        syncPages()
         pool?.keep(items, around: settledPage)
+        syncPages()
         pool?.focus(on: items, index: settledPage)
     }
 
-    /// 外部要求跳到某一页（不做动画）
     func jumpTo(_ i: Int) {
         guard i >= 0, i < max(itemsCount, 1), bounds.height > 0 else { return }
         settledPage = i
         centerPage = i
         scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(i) * bounds.height),
                                     animated: false)
-        syncPages()
         pool?.keep(items, around: i)
+        syncPages()
     }
 
     func applyPaused(_ p: Bool) {
@@ -301,9 +234,15 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         }
     }
 
+    /// 外部状态变化后刷新当前页图标
+    func refreshCurrentPage() {
+        for p in pages where p.pageIndex == settledPage {
+            p.refreshState()
+        }
+    }
+
     // MARK: 页面分配
 
-    /// 让三页视图覆盖 center-1 / center / center+1
     private func syncPages() {
         guard bounds.height > 0, itemsCount > 0 else { return }
         let h = bounds.height, w = bounds.width
@@ -325,15 +264,12 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         for idx in missing {
             guard !free.isEmpty else { break }
             let p = free.removeFirst()
-            let isNew = (p.pageIndex != idx)
             p.pageIndex = idx
             p.isHidden = false
             p.frame = CGRect(x: 0, y: CGFloat(idx) * h, width: w, height: h)
             bind(p, idx)
-
-            // 不是正在播的那页 → 预载第一帧，拖动时就能看到画面
-            if idx != settledPage, isNew {
-                pool?.preloadFrame(items[idx])
+            if idx != settledPage {
+                p.preload()
             }
         }
 
@@ -362,19 +298,12 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         guard bounds.height > 0, itemsCount > 0 else { return }
         let h = bounds.height
         let raw = sv.contentOffset.y / h
-
-        // 拖动偏移，驱动叠加 UI 跟随
-        let delta = raw - CGFloat(settledPage)
-        if abs(delta - lastDelta) > 0.006 {
-            lastDelta = delta
-            onDelta?(delta)
-        }
-
         let nearest = max(0, min(Int(raw.rounded()), itemsCount - 1))
         if nearest != centerPage {
             centerPage = nearest
-            syncPages()
+            // 先扩窗口，再重排（顺序不能反）
             pool?.keep(items, around: nearest)
+            syncPages()
         }
     }
 
@@ -398,26 +327,22 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
         if page != settledPage {
             settledPage = page
-            syncPages()
             pool?.keep(items, around: page)
+            syncPages()
             if !pausedNow { pool?.focus(on: items, index: page) }
             onIndexChange?(page)
         }
 
-        if let p = pages.first(where: { $0.pageIndex == page }) {
+        for p in pages where p.pageIndex == page {
             p.markReady()
-        }
-        if lastDelta != 0 {
-            lastDelta = 0
-            onDelta?(0)
+            p.refreshState()
         }
     }
 
     // MARK: 播放结束
 
     private func handlePlaybackEnd(_ vid: String) {
-        guard AppSettings.shared.autoplay else { return }
-        guard !pausedNow else { return }
+        guard AppSettings.shared.autoplay, !pausedNow else { return }
         guard settledPage + 1 < itemsCount else { return }
         let next = settledPage + 1
         scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(next) * bounds.height),
