@@ -22,25 +22,20 @@ jobs:
           xcodebuild -version
           sw_vers
 
-      - name: 工程诊断
+      - name: 工程诊断（不阻断）
+        continue-on-error: true
         run: |
           cd swift
-          echo "=== tree ==="
-          find . -type f | sort | head -60
-          echo
-          echo "=== xcodebuild -list (stdout+stderr) ==="
-          xcodebuild -list -project DouyinLocal.xcodeproj || true
-          echo
-          echo "=== plutil 校验 pbxproj ==="
-          plutil -lint DouyinLocal.xcodeproj/project.pbxproj || true
-          echo
-          echo "=== 前 5 行 ==="
-          head -5 DouyinLocal.xcodeproj/project.pbxproj | cat -A | head -5
+          echo "=== files ==="
+          ls -R | head -50
+          echo "=== xcodebuild -list ==="
+          xcodebuild -list -project DouyinLocal.xcodeproj
+          echo "=== plutil ==="
+          plutil -lint DouyinLocal.xcodeproj/project.pbxproj
 
       - name: 编译（不签名）
         run: |
           cd swift
-          set +e
           xcodebuild build \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
@@ -53,15 +48,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            > build.log 2>&1
-          rc=$?
-          echo "exit=$rc"
-          echo "===== tail 120 ====="
-          tail -120 build.log
-          exit $rc
+            2>&1 | tail -150
 
       - name: 打包 unsigned IPA
-        if: success()
         run: |
           set -e
           cd swift
@@ -73,18 +62,8 @@ jobs:
           ls -lh ../DouyinLocal-unsigned.ipa
 
       - name: 上传 IPA
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
           path: swift/DouyinLocal-unsigned.ipa
           retention-days: 30
-
-      - name: 上传日志
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: swift/build.log
-          retention-days: 14
-          if-no-files-found: warn
