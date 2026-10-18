@@ -77,8 +77,18 @@ jobs:
       - name: 打包 IPA
         run: |
           set -e
-          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
-          echo "APP=$APP"
+          echo "===== build/ 目录 ====="
+          ls -la build 2>&1 || true
+          echo "===== 查找 .app ====="
+          find build -name "*.app" -maxdepth 6 2>&1 || true
+          echo "===== 查找 .xcarchive ====="
+          find build -name "*.xcarchive" -maxdepth 4 2>&1 || true
+          APP=$(find build -name "*.app" -maxdepth 6 2>/dev/null | head -1)
+          echo "APP=[$APP]"
+          if [ -z "$APP" ]; then
+            echo "!! 没有找到 .app，编译未产出产物"
+            exit 1
+          fi
           rm -rf out && mkdir -p out/Payload
           cp -R "$APP" out/Payload/
           ( cd out && zip -qry ../DouyinLocal-unsigned.ipa Payload )
