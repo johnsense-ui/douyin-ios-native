@@ -1,4 +1,4 @@
-//
+﻿//
 //  SearchView.swift
 //  DouyinLocal
 //
@@ -33,7 +33,6 @@ struct SearchView: View {
     @State private var history: [String] = []
 
     @State private var route: SearchRoute?
-    @State private var playItems: [FeedItem] = []
 
     @FocusState private var focused: Bool
 
@@ -68,8 +67,8 @@ struct SearchView: View {
             switch r {
             case .author(let aid):
                 AuthorView(authorId: aid)
-            case .play(let t):
-                PlayerTargetView(targets: playItems, startVid: t.vid, authorName: t.author)
+            case .play(let item):
+                PlayerTargetView(targets: [item], startVid: item.vid, authorName: item.author)
             }
         }
     }
@@ -437,10 +436,7 @@ struct SearchView: View {
             if let r = try? await APIClient.shared.videos(byIDs: [g.vid]),
                let item = r.items.first {
                 await MainActor.run {
-                    playItems = [item]
-                    route = .play(PlayerTarget(authorId: item.authorId,
-                                               vid: item.vid,
-                                               author: item.author))
+                    route = .play(item)
                 }
             }
         }
@@ -475,12 +471,12 @@ struct SearchView: View {
 
 enum SearchRoute: Identifiable {
     case author(String)
-    case play(PlayerTarget)
+    case play(FeedItem)
 
     var id: String {
         switch self {
         case .author(let a): return "author-\(a)"
-        case .play(let t): return "play-\(t.vid)"
+        case .play(let i): return "play-\(i.vid)"
         }
     }
 }
