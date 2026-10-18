@@ -308,9 +308,3 @@ struct ProfileView: View {
         }
     }
 }
-
-// MARK: - 可 Identifiable 的 authorId
-struct AuthorTarget: Identifiable, Hashable {
-    let id: String
-}
-
