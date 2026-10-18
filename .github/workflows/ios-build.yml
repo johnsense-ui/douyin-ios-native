@@ -20,35 +20,45 @@ jobs:
       - name: 环境
         run: |
           xcodebuild -version
-          sw_vers
 
-      - name: 工程诊断（不阻断）
-        continue-on-error: true
+      - name: 编译并提取错误
         run: |
           cd swift
-          echo "=== files ==="
-          ls -R | head -50
-          echo "=== xcodebuild -list ==="
-          xcodebuild -list -project DouyinLocal.xcodeproj
-          echo "=== plutil ==="
-          plutil -lint DouyinLocal.xcodeproj/project.pbxproj
-
-      - name: 编译（不签名）
-        run: |
-          cd swift
+          set +e
           xcodebuild build \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            2>&1 | tail -150
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            > build.log 2>&1
+          rc=$?
+          echo "exit=$rc"
+          echo "===================== ERRORS ====================="
+          grep -n "error:" build.log | head -40 || echo "(无 error: 行)"
+          echo "===================== FAILED CMD ================="
+          grep -n -A6 "The following build commands failed" build.log | head -30 || true
+          echo "===================== LAST 40 ===================="
+          tail -40 build.log
+          # 把精简日志写进 artifact 之外的固定名字
+          grep -n "error:" build.log > errors.txt || true
+          tail -200 build.log > tail.txt || true
+          exit $rc
+
+      - name: 上传错误日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: |
+            swift/errors.txt
+            swift/tail.txt
+            swift/build.log
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: 打包 unsigned IPA
         run: |
