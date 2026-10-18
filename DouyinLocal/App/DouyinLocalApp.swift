@@ -31,7 +31,7 @@ struct RootView: View {
 /// 首次启动：填写服务器地址
 struct ServerSetupView: View {
     @AppStorage("hasServer") private var hasServer = false
-    @State private var text = "https://locvid-pc.tail83739b.ts.net:8444"
+    @State private var text = "https://locvid-pc.tail83739b.ts.net:8446"
     @State private var checking = false
     @State private var status: String?
 
@@ -59,8 +59,11 @@ struct ServerSetupView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.15)))
 
                 if let s = status {
-                    Text(s).font(.system(size: 12))
+                    Text(s)
+                        .font(.system(size: 12.5))
                         .foregroundStyle(s.hasPrefix("✓") ? .green : Theme.likeRed)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineSpacing(2)
                 }
 
                 Button {
@@ -117,10 +120,31 @@ struct ServerSetupView: View {
                 }
             } catch {
                 await MainActor.run {
-                    status = "连接失败：\(error.localizedDescription)"
+                    status = Self.friendly(error)
                     checking = false
                 }
             }
+        }
+    }
+
+    /// 把 NSURLError 翻译成能照着做的提示
+    private static func friendly(_ e: Error) -> String {
+        guard let u = e as? URLError else {
+            return "连接失败：\(e.localizedDescription)"
+        }
+        switch u.code {
+        case .badServerResponse, .cannotParseResponse:
+            return "服务器没响应或返回异常。\n检查电脑上索引服务是否在跑、Tailscale 是否已映射该端口。"
+        case .cannotFindHost, .cannotConnectToHost:
+            return "连不上这个地址。\n确认 iPhone 已登录同一个 Tailscale 账号。"
+        case .timedOut:
+            return "连接超时。\n确认电脑没休眠、Tailscale 在线。"
+        case .notConnectedToInternet:
+            return "手机没有网络。"
+        case .secureConnectionFailed, .serverCertificateUntrusted:
+            return "HTTPS 证书异常。\n确认地址端口是 Tailscale Serve 提供的。"
+        default:
+            return "连接失败（\(u.code.rawValue)）：\(u.localizedDescription)"
         }
     }
 }
