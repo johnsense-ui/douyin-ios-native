@@ -4,12 +4,13 @@
 //
 //  原生分页滚动 + 每页一个视频画面。
 //
-//  关键点（这决定了「慢速上滑能看到下一条第一帧」）：
-//   · 视频画面是 UIScrollView 的**子视图**，跟着手指 1:1 移动
-//   · 三页（当前 ±1）各自持有一个 AVPlayerLayer，下一頁已停在第一帧
-//   · 视频按原始比例显示（resizeAspect），不拉伸不裁切
-//
-//  手势：单击 / 双击挂在 scrollView 上，双击优先。
+//  对齐抖音的行为：
+//   · 手指拖动时，整页（视频画面）跟着 1:1 移动
+//   · 拖动过程中**旧视频继续播放**，新视频停在第一帧（不播）
+//   · 落位（吸附完成）之后才切换播放：新视频开始播，旧视频暂停
+//   · 视频按原始比例完整显示（resizeAspect），不裁切不拉伸
+//   · 每页盖一层封面，等 AVPlayerLayer.isReadyForDisplay 变 true 才揭开
+//     —— 解决「有声音没画面」的黑屏
 //
 
 import SwiftUI
@@ -21,8 +22,9 @@ import AVFoundation
 final class PageVideoView: UIView {
     let playerLayer = AVPlayerLayer()
     private let coverView = UIImageView()
+    private var displayObs: NSKeyValueObservation?
 
-    var pageIndex: Int = -1
+    private(set) var pageIndex: Int = -1
     private(set) var vid: String = ""
 
     override init(frame: CGRect) {
@@ -30,14 +32,20 @@ final class PageVideoView: UIView {
         backgroundColor = .black
         clipsToBounds = true
 
-        playerLayer.videoGravity = .resizeAspect      // 保持比例，完整显示
+        playerLayer.videoGravity = .resizeAspect
         playerLayer.backgroundColor = UIColor.black.cgColor
         layer.addSublayer(playerLayer)
 
         coverView.contentMode = .scaleAspectFit
-        coverView.backgroundColor = .black
+        coverView.backgroundColor = .clear
         coverView.clipsToBounds = true
         addSubview(coverView)
+
+        // 画面真正可显示时才揭开封面（这是防黑屏的关键）
+        displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
+            guard l.isReadyForDisplay else { return }
+            DispatchQueue.main.async { self?.revealVideo() }
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -56,21 +64,27 @@ final class PageVideoView: UIView {
         if vid != item.vid {
             vid = item.vid
             playerLayer.player = player
+            coverView.alpha = 1
             loadCover(item.coverURL)
         } else if playerLayer.player !== player {
             playerLayer.player = player
         }
-        coverView.alpha = ready ? 0 : 1
+        if playerLayer.isReadyForDisplay {
+            coverView.alpha = 0
+        } else if !ready {
+            coverView.alpha = 1
+        }
     }
 
-    func markReady() {
+    func markReady() { revealVideo() }
+
+    private func revealVideo() {
         guard coverView.alpha != 0 else { return }
-        UIView.animate(withDuration: 0.16) { self.coverView.alpha = 0 }
+        UIView.animate(withDuration: 0.12) { self.coverView.alpha = 0 }
     }
 
     private func loadCover(_ url: URL?) {
         coverView.image = nil
-        coverView.alpha = 1
         guard let url else { return }
         if let cached = ImageCache.shared.get(url) {
             coverView.image = cached
@@ -81,8 +95,9 @@ final class PageVideoView: UIView {
             guard let data, let img = UIImage(data: data) else { return }
             ImageCache.shared.set(url, img)
             DispatchQueue.main.async {
-                // 期间可能已经换成别的视频
-                if self.vid == targetVid { self.coverView.image = img }
+                if self.vid == targetVid, self.coverView.alpha > 0 {
+                    self.coverView.image = img
+                }
             }
         }.resume()
     }
@@ -97,8 +112,8 @@ struct PlayerStage: UIViewRepresentable {
     let paused: Bool
     var onTap: () -> Void = {}
     var onDoubleTap: (CGPoint) -> Void = { _ in }
-    /// 滚动进度：-1…1，用于让叠加 UI 跟随
-    var onProgress: (CGFloat) -> Void = { _ in }
+    /// 拖动偏移（单位：页），0 表示已归位
+    var onDelta: (CGFloat) -> Void = { _ in }
 
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
@@ -112,8 +127,8 @@ struct PlayerStage: UIViewRepresentable {
         v.applyPaused(paused)
         if v.itemsCount != items.count {
             v.configure(items: items)
-        } else if v.currentPage != index {
-            v.scrollTo(index, animated: false)
+        } else if v.settledPage != index {
+            v.jumpTo(index)
         }
     }
 
@@ -125,7 +140,7 @@ struct PlayerStage: UIViewRepresentable {
         }
         v.onTap = { DispatchQueue.main.async { onTap() } }
         v.onDoubleTap = { p in DispatchQueue.main.async { onDoubleTap(p) } }
-        v.onProgress = { p in DispatchQueue.main.async { onProgress(p) } }
+        v.onDelta = { d in DispatchQueue.main.async { onDelta(d) } }
         v.pool = pool
     }
 }
@@ -138,23 +153,31 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
     var pool: PlayerPool? {
         didSet {
-            pool?.onReady = { [weak self] vid in
+            guard let pool else { return }
+            pool.onReady = { [weak self] vid in
                 self?.pages.first(where: { $0.vid == vid })?.markReady()
+            }
+            pool.onEnd = { [weak self] vid in
+                self?.handlePlaybackEnd(vid)
             }
         }
     }
 
-    var items: [FeedItem] = []
+    private(set) var items: [FeedItem] = []
     private(set) var itemsCount = 0
-    private(set) var currentPage = 0
+    /// 正在播放的页（只在吸附完成后更新）
+    private(set) var settledPage = 0
+    /// 当前离屏幕中心最近的一页（拖动中会变，用于分配三页）
+    private var centerPage = 0
 
     var onIndexChange: ((Int) -> Void)?
-    var onProgress: ((CGFloat) -> Void)?
+    var onDelta: ((CGFloat) -> Void)?
     var onTap: (() -> Void)?
     var onDoubleTap: ((CGPoint) -> Void)?
 
-    private var lastProgress: CGFloat = 99
+    private var lastDelta: CGFloat = 99
     private var pausedNow = false
+    private var adjustingRate = false
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -180,7 +203,11 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         let double = UITapGestureRecognizer(target: self, action: #selector(handleDouble(_:)))
         double.numberOfTapsRequired = 2
         single.require(toFail: double)
-        for g in [single, double] {
+
+        let long = UILongPressGestureRecognizer(target: self, action: #selector(handleLong(_:)))
+        long.minimumPressDuration = 0.28
+
+        for g in [single, double, long] as [UIGestureRecognizer] {
             g.delegate = self
             g.cancelsTouchesInView = false
             scrollView.addGestureRecognizer(g)
@@ -189,9 +216,30 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
     required init?(coder: NSCoder) { fatalError() }
 
+    // MARK: 手势
+
     @objc private func handleSingle() { onTap?() }
+
     @objc private func handleDouble(_ g: UITapGestureRecognizer) {
         onDoubleTap?(g.location(in: self))
+    }
+
+    @objc private func handleLong(_ g: UILongPressGestureRecognizer) {
+        guard AppSettings.shared.longPressSpeed else { return }
+        guard settledPage < items.count else { return }
+        let vid = items[settledPage].vid
+        switch g.state {
+        case .began:
+            adjustingRate = true
+            pool?.setRate(2.0, vid: vid)
+        case .ended, .cancelled, .failed:
+            if adjustingRate {
+                adjustingRate = false
+                pool?.setRate(1.0, vid: vid)
+            }
+        default:
+            break
+        }
     }
 
     func gestureRecognizer(_ g: UIGestureRecognizer,
@@ -199,7 +247,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         true
     }
 
-    // MARK: 布局
+    // MARK: 布局 / 配置
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -215,27 +263,32 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
     func configure(items: [FeedItem]) {
         self.items = items
         itemsCount = items.count
-        currentPage = min(currentPage, max(itemsCount - 1, 0))
-        // 全部重置，避免残留旧绑定
+        settledPage = min(settledPage, max(itemsCount - 1, 0))
+        centerPage = settledPage
+
         for p in pages {
             p.pageIndex = -1
             p.isHidden = true
+            p.playerLayer.player = nil
         }
         setNeedsLayout()
         layoutIfNeeded()
-        scrollView.setContentOffset(CGPoint(x: 0,
-                                            y: CGFloat(currentPage) * bounds.height),
+        scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(settledPage) * bounds.height),
                                     animated: false)
         syncPages()
-        pool?.focus(on: items, index: currentPage)
+        pool?.keep(items, around: settledPage)
+        pool?.focus(on: items, index: settledPage)
     }
 
-    func scrollTo(_ i: Int, animated: Bool) {
+    /// 外部要求跳到某一页（不做动画）
+    func jumpTo(_ i: Int) {
         guard i >= 0, i < max(itemsCount, 1), bounds.height > 0 else { return }
-        currentPage = i
+        settledPage = i
+        centerPage = i
         scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(i) * bounds.height),
-                                    animated: animated)
+                                    animated: false)
         syncPages()
+        pool?.keep(items, around: i)
     }
 
     func applyPaused(_ p: Bool) {
@@ -243,23 +296,24 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         pausedNow = p
         if p {
             pool?.pause()
-        } else if currentPage < items.count {
-            pool?.resume(items[currentPage].vid)
+        } else if settledPage < items.count {
+            pool?.resume(items[settledPage].vid)
         }
     }
 
-    /// 让三页视图分别落在 current-1 / current / current+1
+    // MARK: 页面分配
+
+    /// 让三页视图覆盖 center-1 / center / center+1
     private func syncPages() {
         guard bounds.height > 0, itemsCount > 0 else { return }
         let h = bounds.height, w = bounds.width
 
         var needed = Set<Int>()
         for d in -1...1 {
-            let i = currentPage + d
+            let i = centerPage + d
             if i >= 0 && i < itemsCount { needed.insert(i) }
         }
 
-        // 已经在正确位置的保留
         var assigned = Set<Int>()
         for p in pages where needed.contains(p.pageIndex) {
             assigned.insert(p.pageIndex)
@@ -271,10 +325,16 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         for idx in missing {
             guard !free.isEmpty else { break }
             let p = free.removeFirst()
+            let isNew = (p.pageIndex != idx)
             p.pageIndex = idx
             p.isHidden = false
             p.frame = CGRect(x: 0, y: CGFloat(idx) * h, width: w, height: h)
             bind(p, idx)
+
+            // 不是正在播的那页 → 预载第一帧，拖动时就能看到画面
+            if idx != settledPage, isNew {
+                pool?.preloadFrame(items[idx])
+            }
         }
 
         for p in free {
@@ -283,7 +343,6 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             p.playerLayer.player = nil
         }
 
-        // 尺寸变化时矫正
         for p in pages where p.pageIndex >= 0 {
             let f = CGRect(x: 0, y: CGFloat(p.pageIndex) * h, width: w, height: h)
             if p.frame != f { p.frame = f }
@@ -304,22 +363,18 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         let h = bounds.height
         let raw = sv.contentOffset.y / h
 
-        // 进度（-0.5…0.5），让叠加 UI 跟随
-        let frac = raw - raw.rounded()
-        if abs(frac - lastProgress) > 0.02 {
-            lastProgress = frac
-            onProgress?(frac)
+        // 拖动偏移，驱动叠加 UI 跟随
+        let delta = raw - CGFloat(settledPage)
+        if abs(delta - lastDelta) > 0.006 {
+            lastDelta = delta
+            onDelta?(delta)
         }
 
-        let page = Int(raw.rounded())
-        let clamped = max(0, min(page, itemsCount - 1))
-        if clamped != currentPage {
-            currentPage = clamped
+        let nearest = max(0, min(Int(raw.rounded()), itemsCount - 1))
+        if nearest != centerPage {
+            centerPage = nearest
             syncPages()
-            if !pausedNow {
-                pool?.focus(on: items, index: clamped)
-            }
-            onIndexChange?(clamped)
+            pool?.keep(items, around: nearest)
         }
     }
 
@@ -331,24 +386,41 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         settle(sv)
     }
 
+    func scrollViewDidEndScrollingAnimation(_ sv: UIScrollView) {
+        settle(sv)
+    }
+
     private func settle(_ sv: UIScrollView) {
         guard bounds.height > 0, itemsCount > 0 else { return }
-        let page = Int((sv.contentOffset.y / bounds.height).rounded())
-        let clamped = max(0, min(page, itemsCount - 1))
-        if clamped != currentPage {
-            currentPage = clamped
+        let page = max(0, min(Int((sv.contentOffset.y / bounds.height).rounded()),
+                             itemsCount - 1))
+        centerPage = page
+
+        if page != settledPage {
+            settledPage = page
             syncPages()
-            onIndexChange?(clamped)
+            pool?.keep(items, around: page)
+            if !pausedNow { pool?.focus(on: items, index: page) }
+            onIndexChange?(page)
         }
-        if let p = pages.first(where: { $0.pageIndex == clamped }) {
-            if pool?.isReady(items[clamped].vid) == true { p.markReady() }
+
+        if let p = pages.first(where: { $0.pageIndex == page }) {
+            p.markReady()
         }
-        if !pausedNow {
-            pool?.focus(on: items, index: clamped)
+        if lastDelta != 0 {
+            lastDelta = 0
+            onDelta?(0)
         }
-        if abs(lastProgress) > 0.001 {
-            lastProgress = 0
-            onProgress?(0)
-        }
+    }
+
+    // MARK: 播放结束
+
+    private func handlePlaybackEnd(_ vid: String) {
+        guard AppSettings.shared.autoplay else { return }
+        guard !pausedNow else { return }
+        guard settledPage + 1 < itemsCount else { return }
+        let next = settledPage + 1
+        scrollView.setContentOffset(CGPoint(x: 0, y: CGFloat(next) * bounds.height),
+                                    animated: true)
     }
 }
