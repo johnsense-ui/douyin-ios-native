@@ -1,4 +1,4 @@
-﻿//
+//
 //  AuthorView.swift
 //  DouyinLocal
 //
@@ -26,6 +26,12 @@ struct AuthorView: View {
     @ObservedObject private var state = StateStore.shared
 
     private var limit = 30
+
+    // @State private 会让编译器生成的成员初始化器变成 private，这里显式给一个
+    init(authorId: String, onClose: (() -> Void)? = nil) {
+        self.authorId = authorId
+        self.onClose = onClose
+    }
     private let columns = [
         GridItem(.flexible(), spacing: 1.5),
         GridItem(.flexible(), spacing: 1.5),
