@@ -238,6 +238,12 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         if !missing.isEmpty {
             FramePrefetcher.shared.prefetch(Array(missing.prefix(2)))
         }
+
+        // 把后面 2 条整段下载到本地缓存（循环/切条就不会再黑）
+        if AppSettings.shared.videoCacheMB > 0 {
+            let ahead = Array(items[min(items.count - 1, page + 1)...])
+            VideoCache.shared.prefetch(Array(ahead), limit: 2)
+        }
     }
 
     func jumpTo(_ i: Int) {
