@@ -110,6 +110,8 @@ final class PlayerPool: ObservableObject {
     private var slotOf: [String: Int] = [:]
     /// 当前窗口内要保留的 vid
     private var kept: Set<String> = []
+    /// 正在播放的 vid —— 任何情况下都不允许被抢占
+    private var playingVid: String?
 
     /// 任意槽位首帧就绪时回调
     var onReady: ((String) -> Void)?
@@ -145,9 +147,10 @@ final class PlayerPool: ObservableObject {
             slotOf[item.vid] = free
             return free
         }
-        // 抢一个不在保留集合里的
+        // 抢一个「既不在保留窗口、也不是正在播放」的槽
         if let victim = (0..<slots.count).first(where: { s in
             guard let v = slots[s].vid else { return true }
+            if v == playingVid { return false }     // 正在播的绝不动
             return !kept.contains(v)
         }) {
             if let old = slots[victim].vid { slotOf.removeValue(forKey: old) }
@@ -155,7 +158,14 @@ final class PlayerPool: ObservableObject {
             slotOf[item.vid] = victim
             return victim
         }
-        // 兜底：复用 0 号
+        // 还是找不到：扩大范围，挑一个不是当前播放的
+        if let victim = (0..<slots.count).first(where: { slots[$0].vid != playingVid }) {
+            if let old = slots[victim].vid { slotOf.removeValue(forKey: old) }
+            slots[victim].prepare(item)
+            slotOf[item.vid] = victim
+            return victim
+        }
+        // 极端兜底（只有一个槽且正在播）
         if let old = slots[0].vid { slotOf.removeValue(forKey: old) }
         slots[0].prepare(item)
         slotOf[item.vid] = 0
@@ -207,6 +217,7 @@ final class PlayerPool: ObservableObject {
 
         // 当前条播放，其它暂停
         let curVid = items[index].vid
+        playingVid = curVid
         let cur = slots[assign(items[index])]
         cur.play()
         for s in slots where s.vid != nil && s.vid != curVid {
