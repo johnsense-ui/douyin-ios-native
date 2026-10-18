@@ -1,4 +1,4 @@
-//
+﻿//
 //  AppSettings.swift
 //  DouyinLocal
 //
@@ -63,6 +63,10 @@ final class AppSettings: ObservableObject {
     @Published var longPressSpeed: Bool {
         didSet { d.set(longPressSpeed, forKey: "set.longPressSpeed") }
     }
+    /// 启动时自动扫描新增视频
+    @Published var autoScan: Bool {
+        didSet { d.set(autoScan, forKey: "set.autoScan") }
+    }
 
     private let d = UserDefaults.standard
 
@@ -74,12 +78,14 @@ final class AppSettings: ObservableObject {
             "set.algo": 0,
             "set.pageSize": 12,
             "set.longPressSpeed": true,
+            "set.autoScan": true,
         ])
         autoplay = ud.bool(forKey: "set.autoplay")
         loopOne = ud.bool(forKey: "set.loopOne")
         algo = RecommendAlgo(rawValue: ud.integer(forKey: "set.algo")) ?? .mixed
         pageSize = ud.integer(forKey: "set.pageSize")
         longPressSpeed = ud.bool(forKey: "set.longPressSpeed")
+        autoScan = ud.bool(forKey: "set.autoScan")
     }
 
     /// 自动连播和单条循环互斥
