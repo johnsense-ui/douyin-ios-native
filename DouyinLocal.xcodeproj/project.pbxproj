@@ -22,6 +22,8 @@
 		A1B2C3D4000000000000020C /* HeartBurst.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000000000000010C /* HeartBurst.swift */; };
 		A1B2C3D4000000000000020D /* CachedAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4000000000000010D /* CachedAsyncImage.swift */; };
 		A1B2C3D40000000000000301 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000300 /* Assets.xcassets */; };
+		A1B2C3D40000000000000901 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000900 /* ProfileView.swift */; };
+		A1B2C3D40000000000000903 /* PlayerTargetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000902 /* PlayerTargetView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +44,8 @@
 		A1B2C3D40000000000000300 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1B2C3D40000000000000302 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D40000000000000303 /* DouyinLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DouyinLocal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D40000000000000900 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000902 /* PlayerTargetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerTargetView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +81,7 @@
 				A1B2C3D40000000000000408 /* UI */,
 				A1B2C3D40000000000000300 /* Assets.xcassets */,
 				A1B2C3D40000000000000302 /* Info.plist */,
+				A1B2C3D40000000000000904 /* Profile */,
 			);
 			path = DouyinLocal;
 			sourceTree = "<group>";
@@ -127,6 +132,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D40000000000000106 /* PlayerPool.swift */,
+				A1B2C3D40000000000000902 /* PlayerTargetView.swift */,
 			);
 			path = Player;
 			sourceTree = "<group>";
@@ -164,6 +170,14 @@
 				A1B2C3D4000000000000010D /* CachedAsyncImage.swift */,
 			);
 			path = UI;
+			sourceTree = "<group>";
+		};
+		A1B2C3D40000000000000904 /* Profile */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40000000000000900 /* ProfileView.swift */,
+			);
+			path = Profile;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -249,6 +263,8 @@
 				A1B2C3D4000000000000020B /* Theme.swift in Sources */,
 				A1B2C3D4000000000000020C /* HeartBurst.swift in Sources */,
 				A1B2C3D4000000000000020D /* CachedAsyncImage.swift in Sources */,
+				A1B2C3D40000000000000901 /* ProfileView.swift in Sources */,
+				A1B2C3D40000000000000903 /* PlayerTargetView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
