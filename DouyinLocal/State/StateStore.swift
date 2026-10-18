@@ -2,8 +2,9 @@
 //  StateStore.swift
 //  DouyinLocal
 //
-//  点赞 / 收藏。本地即时生效，后台异步同步到服务端。
-//  初始为空 —— 不读取任何原有 db。
+//  本地点赞 / 收藏 / 关注。
+//  初始全空 —— 不读取任何原有 db，也不与原始数据合并。
+//  本地即时生效，后台异步同步到服务端 state.json。
 //
 
 import Foundation
@@ -15,37 +16,52 @@ final class StateStore: ObservableObject {
 
     @Published private(set) var liked: Set<String> = []
     @Published private(set) var saved: Set<String> = []
+    /// 关注的作者 authorId
+    @Published private(set) var following: Set<String> = []
 
     private let likedKey = "state.liked"
     private let savedKey = "state.saved"
+    private let followKey = "state.following"
+
     private var pendingLiked: [String: Bool] = [:]
     private var pendingSaved: [String: Bool] = [:]
+    private var pendingFollow: [String: Bool] = [:]
     private var flushTask: Task<Void, Never>?
 
     init() { load() }
 
-    // MARK: - 本地持久化
+    // MARK: - 持久化
 
     private func load() {
         let d = UserDefaults.standard
         liked = Set(d.stringArray(forKey: likedKey) ?? [])
         saved = Set(d.stringArray(forKey: savedKey) ?? [])
+        following = Set(d.stringArray(forKey: followKey) ?? [])
     }
 
     private func persist() {
         let d = UserDefaults.standard
         d.set(Array(liked), forKey: likedKey)
         d.set(Array(saved), forKey: savedKey)
+        d.set(Array(following), forKey: followKey)
     }
 
     // MARK: - 查询
 
     func isLiked(_ vid: String) -> Bool { liked.contains(vid) }
     func isSaved(_ vid: String) -> Bool { saved.contains(vid) }
+    func isFollowing(_ authorId: String) -> Bool { following.contains(authorId) }
+
+    var likedCount: Int { liked.count }
+    var savedCount: Int { saved.count }
+    var followingCount: Int { following.count }
+
+    var likedIDs: [String] { Array(liked) }
+    var savedIDs: [String] { Array(saved) }
+    var followingIDs: [String] { Array(following) }
 
     // MARK: - 写入
 
-    /// 返回最新状态（方便调用方做动画）
     @discardableResult
     func toggleLike(_ vid: String) -> Bool {
         let now: Bool
@@ -74,30 +90,46 @@ final class StateStore: ObservableObject {
         return now
     }
 
-    /// 合并服务端返回的状态
-    func merge(liked vids: [String], saved svids: [String]) {
-        liked.formUnion(vids)
-        saved.formUnion(svids)
+    @discardableResult
+    func toggleFollow(_ authorId: String) -> Bool {
+        let now: Bool
+        if following.contains(authorId) {
+            following.remove(authorId); now = false
+        } else {
+            following.insert(authorId); now = true
+        }
+        pendingFollow[authorId] = now
+        persist()
+        scheduleFlush()
+        return now
+    }
+
+    /// 合并服务端返回的状态（首次启动时拉取）
+    func merge(liked l: [String], saved s: [String], following f: [String]) {
+        liked.formUnion(l)
+        saved.formUnion(s)
+        following.formUnion(f)
         persist()
     }
 
-    // MARK: - 同步（合并请求，避免连点刷爆）
+    // MARK: - 同步
 
     private func scheduleFlush() {
         flushTask?.cancel()
         flushTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            guard let self else { return }
-            await self.flush()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            await self?.flush()
         }
     }
 
     private func flush() async {
-        guard !pendingLiked.isEmpty || !pendingSaved.isEmpty else { return }
-        let l = pendingLiked
-        let s = pendingSaved
+        guard !pendingLiked.isEmpty || !pendingSaved.isEmpty || !pendingFollow.isEmpty else {
+            return
+        }
+        let l = pendingLiked, s = pendingSaved, f = pendingFollow
         pendingLiked.removeAll()
         pendingSaved.removeAll()
-        await APIClient.shared.pushState(liked: l, saved: s)
+        pendingFollow.removeAll()
+        await APIClient.shared.pushState(liked: l, saved: s, following: f)
     }
 }
