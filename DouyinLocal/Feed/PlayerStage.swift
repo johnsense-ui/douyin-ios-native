@@ -240,10 +240,21 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             FramePrefetcher.shared.prefetch(Array(missing.prefix(2)))
         }
 
-        // 把后面 2 条整段下载到本地缓存（循环/切条就不会再黑）
+        // 预热下一条解码器（不播放，只建管线）——落位后 play 时几乎零延迟
+        if page + 1 < items.count {
+            let next = items[page + 1]
+            // 先确保它有播放器，再预热
+            _ = pool?.player(for: next)
+            pool?.preroll(next)
+        }
+
+        // 把后面 3 条整段下载到本地缓存（循环/切条就不会再黑）
         if AppSettings.shared.videoCacheMB > 0 {
-            let ahead = Array(items[page...])
-            VideoCache.shared.prefetch(Array(ahead), limit: 2)
+            let lo = min(items.count - 1, page + 1)
+            let hi = min(items.count - 1, page + 3)
+            if lo <= hi {
+                VideoCache.shared.prefetch(Array(items[lo...hi]), limit: 3)
+            }
         }
     }
 
@@ -304,6 +315,9 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             // 只有当前页需要激活；其它页保持暂停，避免反复 play 把画面打回队首
             if idx == settledPage {
                 p.setActive(true)
+            } else {
+                // 邻页不播放，只预热解码器，落位时能秒起
+                pool?.preroll(items[idx])
             }
         }
 
@@ -363,7 +377,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             settledPage = page
             pool?.keep(items, around: page)
             syncPages()
-            // 只在这里做一次播放控制，不再重复
+            // 只在完全落位后播放一次
             if !pausedNow { pool?.focus(on: items, index: page) }
             onIndexChange?(page)
         }
