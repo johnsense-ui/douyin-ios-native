@@ -17,7 +17,10 @@ struct AuthorView: View {
     @State private var total = 0
     @State private var loading = true
     @State private var offset = 0
-    @State private var playing: VideoThumb?
+    @State private var playing: PlayStart?
+    @State private var playItems: [FeedItem] = []
+    @State private var preparing = false
+    @ObservedObject private var state = StateStore.shared
 
     private let limit = 30
     private let columns = [
@@ -62,9 +65,22 @@ struct AuthorView: View {
         }
         .preferredColorScheme(.dark)
         .task { await load(reset: true) }
-        .fullScreenCover(item: $playing) { g in
-            AuthorPlayerView(authorId: authorId,
-                             startVid: g.vid,
+        .overlay {
+            if preparing {
+                ZStack {
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    VStack(spacing: 10) {
+                        ProgressView().tint(.white)
+                        Text("载入作品…")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                }
+            }
+        }
+        .fullScreenCover(item: $playing) { s in
+            PlayerTargetView(targets: playItems,
+                             startVid: s.id,
                              authorName: author?.displayName ?? "未知作者")
         }
     }
@@ -98,14 +114,27 @@ struct AuthorView: View {
             }
 
             HStack(spacing: 8) {
-                Button {} label: {
-                    Text("已关注")
+                Button {
+                    state.toggleFollow(authorId)
+                } label: {
+                    Text(state.isFollowing(authorId) ? "已关注" : "关注")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(state.isFollowing(authorId) ? .white.opacity(0.85) : .white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 34)
-                        .background(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.35)))
+                        .background(
+                            Group {
+                                if state.isFollowing(authorId) {
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .stroke(.white.opacity(0.3))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .fill(Theme.primary)
+                                }
+                            }
+                        )
                 }
+                .buttonStyle(.plain)
                 Button {} label: {
                     Text("私信")
                         .font(.system(size: 14, weight: .semibold))
@@ -182,8 +211,32 @@ struct AuthorView: View {
         }
     }
 
+    /// 点九宫格 → 拉全量作品（含视频地址）→ 进入播放
     private func openPlayer(_ g: VideoThumb) {
-        playing = g
+        guard !preparing else { return }
+        preparing = true
+        Task {
+            var all: [FeedItem] = []
+            var off = 0
+            let lim = 60
+            do {
+                while true {
+                    let d = try await APIClient.shared.authorItems(authorId, offset: off, limit: lim)
+                    if d.items.isEmpty { break }
+                    all.append(contentsOf: d.items)
+                    off += d.items.count
+                    if off >= d.total { break }
+                }
+            } catch {
+                print("openPlayer:", error)
+            }
+            await MainActor.run {
+                preparing = false
+                guard !all.isEmpty else { return }
+                playItems = all
+                playing = PlayStart(id: g.vid)
+            }
+        }
     }
 
     // MARK: - 数据
@@ -208,4 +261,9 @@ struct AuthorView: View {
             print("author load error:", error)
         }
     }
+}
+
+// MARK: - 播放起点（可 Identifiable）
+struct PlayStart: Identifiable, Hashable {
+    let id: String
 }
