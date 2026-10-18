@@ -1,4 +1,4 @@
-//
+﻿//
 //  SettingsView.swift
 //  DouyinLocal
 //
@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var stats: ServerStats?
     @State private var scanning = false
     @State private var scanMsg: String?
+    @State private var cacheMB: Int = 0
     @State private var testing = false
     @State private var testResult: String?
 
@@ -165,6 +166,52 @@ struct SettingsView: View {
                                 }
                             }
                             .padding(.vertical, 9)
+                            divider
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("视频缓存上限")
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(.white)
+                                    Spacer()
+                                    Text(cacheMB > 0 ? "已用 \(cacheMB) MB" : "")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Theme.textTertiary)
+                                }
+                                HStack(spacing: 8) {
+                                    ForEach([0, 100, 300, 500], id: \.self) { mb in
+                                        Button {
+                                            s.videoCacheMB = mb
+                                        } label: {
+                                            Text(mb == 0 ? "不缓存" : "\(mb)MB")
+                                                .font(.system(size: 13, weight: .medium))
+                                                .foregroundStyle(s.videoCacheMB == mb ? .white : Theme.textSecondary)
+                                                .frame(maxWidth: .infinity)
+                                                .frame(height: 32)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 7)
+                                                        .fill(s.videoCacheMB == mb
+                                                              ? Theme.primary
+                                                              : Color(white: 0.17))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                Text("缓存后循环播放、滑动切条都不会再黑一下")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(Theme.textTertiary)
+
+                                Button {
+                                    VideoCache.shared.clearAll()
+                                    refreshCacheSize()
+                                } label: {
+                                    Text("清除缓存")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundStyle(Theme.primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            .padding(.vertical, 9)
                         }
                         // 服务器
                         section("服务器") {
@@ -236,7 +283,7 @@ struct SettingsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
-        .onAppear { loadStats() }
+        .onAppear { loadStats(); refreshCacheSize() }
     }
 
     // MARK: - 组件
@@ -280,6 +327,11 @@ struct SettingsView: View {
     }
 
     // MARK: - 视频库
+
+    private func refreshCacheSize() {
+        let bytes = VideoCache.shared.usedBytes()
+        cacheMB = Int((Double(bytes) / 1024 / 1024).rounded())
+    }
 
     private func loadStats() {
         Task {
