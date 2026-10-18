@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "1600"
    version = "1.7">
@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A1000006000000000000001"
+               BlueprintIdentifier = "A1B2C3D40000000000000500"
                BuildableName = "DouyinLocal.app"
                BlueprintName = "DouyinLocal"
                ReferencedContainer = "container:DouyinLocal.xcodeproj">
@@ -44,7 +44,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A1000006000000000000001"
+            BlueprintIdentifier = "A1B2C3D40000000000000500"
             BuildableName = "DouyinLocal.app"
             BlueprintName = "DouyinLocal"
             ReferencedContainer = "container:DouyinLocal.xcodeproj">
@@ -61,7 +61,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "A1000006000000000000001"
+            BlueprintIdentifier = "A1B2C3D40000000000000500"
             BuildableName = "DouyinLocal.app"
             BlueprintName = "DouyinLocal"
             ReferencedContainer = "container:DouyinLocal.xcodeproj">
