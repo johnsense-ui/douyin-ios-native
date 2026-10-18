@@ -129,6 +129,22 @@ struct SearchResult: Decodable {
     let authorTotal: Int
     let videos: [VideoThumb]
     let videoTotal: Int
+    let offset: Int?
+    let limit: Int?
+    let sort: String?
+}
+
+/// 猜你想搜
+struct SuggestItem: Decodable, Identifiable, Hashable {
+    let type: String
+    let text: String
+    var id: String { type + "|" + text }
+    var isAuthor: Bool { type == "author" }
+}
+
+struct SuggestResult: Decodable {
+    let ok: Bool
+    let items: [SuggestItem]
 }
 
 // MARK: - 状态
@@ -153,4 +169,12 @@ struct FeedItemsPage: Decodable {
 /// 可 Identifiable 的 authorId，供 .sheet(item:) 使用
 struct AuthorTarget: Identifiable, Hashable {
     let id: String
+}
+
+/// 播放目标（搜索结果点开时用）
+struct PlayerTarget: Identifiable, Hashable {
+    let authorId: String
+    let vid: String
+    let author: String
+    var id: String { vid }
 }
