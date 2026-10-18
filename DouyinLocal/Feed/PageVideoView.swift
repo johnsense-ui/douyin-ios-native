@@ -129,7 +129,6 @@ final class PageVideoView: UIView {
     private let avatarDot = AvatarDot(size: 46)
     private let followBadge = UIView()
     private let heart = RailItem(systemName: "heart.fill")
-    private let share = RailItem(systemName: "arrowshape.turn.up.right.fill")
     private let save = RailItem(systemName: "bookmark.fill")
 
     private let authorRow = TapRow()
@@ -188,11 +187,8 @@ final class PageVideoView: UIView {
         addSubview(avatarBtn)
 
         heart.button.addTarget(self, action: #selector(tapLike), for: .touchUpInside)
-        share.button.addTarget(self, action: #selector(tapShare), for: .touchUpInside)
         save.button.addTarget(self, action: #selector(tapSave), for: .touchUpInside)
-        share.set(text: "分享")
         addSubview(heart)
-        addSubview(share)
         addSubview(save)
 
         authorRow.addSubview(authorDot)
@@ -376,17 +372,6 @@ final class PageVideoView: UIView {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { self.refreshState() }
     }
 
-    @objc private func tapShare() {
-        guard let item else { return }
-        let text = "\(item.author)：\(item.caption)"
-        let ac = UIActivityViewController(activityItems: [text], applicationActivities: nil)
-        ac.popoverPresentationController?.sourceView = self
-        UIApplication.shared.connectedScenes
-            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-            .first?.rootViewController?
-            .present(ac, animated: true)
-    }
-
     private func loadCover(_ url: URL?) {
         coverView.image = nil
         guard let url else { return }
@@ -427,10 +412,9 @@ final class PageVideoView: UIView {
         CATransaction.commit()
 
         let railW: CGFloat = 64
-        let items: [UIView] = [avatarBtn, heart, share, save]
+        let items: [UIView] = [avatarBtn, heart, save]
         let heights: [CGFloat] = [46 + 8,
                                   heart.intrinsicContentSize.height,
-                                  share.intrinsicContentSize.height,
                                   save.intrinsicContentSize.height]
         let spacing: CGFloat = 14
         let total = heights.reduce(0, +) + spacing * CGFloat(items.count - 1)
@@ -440,7 +424,9 @@ final class PageVideoView: UIView {
             y += heights[i] + spacing
         }
         avatarDot.frame = CGRect(x: (railW - 46) / 2, y: 0, width: 46, height: 46)
-        followBadge.frame = CGRect(x: (railW - 19) / 2 + 8, y: 46 - 10, width: 19, height: 19)
+        // 小加号：水平居中在头像下沿
+        let avatarX = (railW - 46) / 2
+        followBadge.frame = CGRect(x: avatarX + (46 - 19) / 2, y: 46 - 12, width: 19, height: 19)
 
         let textW = w - 96 - 14
         authorDot.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
