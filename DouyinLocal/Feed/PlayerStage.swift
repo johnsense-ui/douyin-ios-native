@@ -24,7 +24,7 @@ final class PageVideoView: UIView {
     private let coverView = UIImageView()
     private var displayObs: NSKeyValueObservation?
 
-    private(set) var pageIndex: Int = -1
+    var pageIndex: Int = -1
     private(set) var vid: String = ""
 
     override init(frame: CGRect) {
