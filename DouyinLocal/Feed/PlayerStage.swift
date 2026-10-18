@@ -1,4 +1,4 @@
-//
+﻿//
 //  PlayerStage.swift
 //  DouyinLocal
 //
@@ -203,7 +203,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         for p in pages {
             p.pageIndex = -1
             p.isHidden = true
-            p.playerLayer.player = nil
+            p.unbind()
         }
         setNeedsLayout()
         layoutIfNeeded()
@@ -268,15 +268,13 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             p.isHidden = false
             p.frame = CGRect(x: 0, y: CGFloat(idx) * h, width: w, height: h)
             bind(p, idx)
-            if idx != settledPage {
-                p.preload()
-            }
+            p.setActive(idx == settledPage)
         }
 
         for p in free {
             p.isHidden = true
             p.pageIndex = -1
-            p.playerLayer.player = nil
+            p.unbind()
         }
 
         for p in pages where p.pageIndex >= 0 {
@@ -333,9 +331,9 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             onIndexChange?(page)
         }
 
-        for p in pages where p.pageIndex == page {
-            p.markReady()
-            p.refreshState()
+        for p in pages where p.pageIndex >= 0 {
+            p.setActive(p.pageIndex == page)
+            if p.pageIndex == page { p.refreshState() }
         }
     }
 
