@@ -1,4 +1,4 @@
-//
+﻿//
 //  AuthorView.swift
 //  DouyinLocal
 //
@@ -10,6 +10,8 @@ import SwiftUI
 
 struct AuthorView: View {
     let authorId: String
+    /// 嵌入使用时（左滑进入）用这个关闭，而不是 dismiss
+    var onClose: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var author: Author?
@@ -20,9 +22,10 @@ struct AuthorView: View {
     @State private var playing: PlayStart?
     @State private var playItems: [FeedItem] = []
     @State private var preparing = false
+    @State private var sort = 0            // 0 = 点赞优先, 1 = 时间优先
     @ObservedObject private var state = StateStore.shared
 
-    private let limit = 30
+    private var limit = 30
     private let columns = [
         GridItem(.flexible(), spacing: 1.5),
         GridItem(.flexible(), spacing: 1.5),
@@ -53,7 +56,7 @@ struct AuthorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
+                    Button { closeSelf() } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
@@ -145,6 +148,14 @@ struct AuthorView: View {
                 }
             }
             .buttonStyle(.plain)
+
+            // 排序：点赞优先 / 时间优先
+            HStack(spacing: 18) {
+                sortTab(0, "点赞优先")
+                sortTab(1, "时间优先")
+                Spacer()
+            }
+            .padding(.top, 2)
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
@@ -164,6 +175,25 @@ struct AuthorView: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(Theme.textSecondary)
         }
+    }
+
+    private func sortTab(_ i: Int, _ title: String) -> some View {
+        Button {
+            guard sort != i else { return }
+            sort = i
+            Task { await load(reset: true) }
+        } label: {
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.system(size: sort == i ? 14.5 : 14,
+                                  weight: sort == i ? .semibold : .regular))
+                    .foregroundStyle(sort == i ? .white : Theme.textTertiary)
+                Capsule()
+                    .fill(sort == i ? Color.white : .clear)
+                    .frame(width: 16, height: 2)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - 九宫格
@@ -221,7 +251,8 @@ struct AuthorView: View {
             let lim = 60
             do {
                 while true {
-                    let d = try await APIClient.shared.authorItems(authorId, offset: off, limit: lim)
+                    let d = try await APIClient.shared.authorItems(authorId, offset: off, limit: lim,
+                                                          sort: sort == 0 ? "digg" : "new")
                     if d.items.isEmpty { break }
                     all.append(contentsOf: d.items)
                     off += d.items.count
@@ -239,6 +270,9 @@ struct AuthorView: View {
         }
     }
 
+    private func closeSelf() {
+        if let onClose { onClose() } else { dismiss() }
+    }
     // MARK: - 数据
 
     private func load(reset: Bool) async {
@@ -252,7 +286,8 @@ struct AuthorView: View {
         loading = true
         defer { loading = false }
         do {
-            let d = try await APIClient.shared.author(authorId, offset: offset, limit: limit)
+            let d = try await APIClient.shared.author(authorId, offset: offset, limit: limit,
+                                                         sort: sort == 0 ? "digg" : "new")
             author = d.author
             total = d.total
             if reset { items = d.items } else { items.append(contentsOf: d.items) }
