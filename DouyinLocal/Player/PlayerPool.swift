@@ -24,6 +24,10 @@ final class PlayerSlot: NSObject {
 
     /// 首帧就绪回调（在主线程）
     var onReady: ((String) -> Void)?
+    /// 播放结束回调（未开启循环时）
+    var onEnd: ((String) -> Void)?
+    /// 是否单条循环
+    var loopEnabled = true
 
     private var statusObs: NSKeyValueObservation?
     private var loopObs: NSObjectProtocol?
@@ -59,8 +63,13 @@ final class PlayerSlot: NSObject {
             forName: .AVPlayerItemDidPlayToEndTime,
             object: pi, queue: .main) { [weak self] _ in
                 guard let self else { return }
-                self.player.seek(to: .zero)
-                self.player.play()
+                if self.loopEnabled {
+                    self.player.seek(to: .zero)
+                    self.player.play()
+                } else {
+                    self.player.pause()
+                    if let v = self.vid { self.onEnd?(v) }
+                }
             }
     }
 
@@ -104,16 +113,26 @@ final class PlayerPool: ObservableObject {
 
     /// 任意槽位首帧就绪时回调
     var onReady: ((String) -> Void)?
+    /// 任意槽位播放结束时回调（未开启循环时）
+    var onEnd: ((String) -> Void)?
 
     init() {
         for s in slots {
             s.onReady = { [weak self] vid in
                 self?.onReady?(vid)
             }
+            s.onEnd = { [weak self] vid in
+                self?.onEnd?(vid)
+            }
         }
         // 静音开关拨到静音也要出声
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    private func applyLoopSetting() {
+        let loop = AppSettings.shared.loopOne
+        for s in slots { s.loopEnabled = loop }
     }
 
     // MARK: - 槽位分配
@@ -153,10 +172,32 @@ final class PlayerPool: ObservableObject {
         return slots[i].ready
     }
 
+    /// 预载某条视频并停在第一帧（拖动时就能看到画面）
+    func preloadFrame(_ item: FeedItem) {
+        let i = assign(item)
+        slots[i].preloadFrame()
+    }
+
+    /// 长按倍速
+    func setRate(_ rate: Float, vid: String) {
+        if let i = slotOf[vid] {
+            slots[i].player.rate = rate
+        }
+    }
+
     // MARK: - 主入口
+
+    /// 只更新「保留窗口」，不改变播放状态（拖动过程中用）
+    func keep(_ items: [FeedItem], around index: Int) {
+        guard !items.isEmpty, index >= 0, index < items.count else { return }
+        let lo = max(0, index - 1)
+        let hi = min(items.count - 1, index + 1)
+        kept = Set(items[lo...hi].map { $0.vid })
+    }
 
     func focus(on items: [FeedItem], index: Int) {
         guard !items.isEmpty, index >= 0, index < items.count else { return }
+        applyLoopSetting()
         let lo = max(0, index - 1)
         let hi = min(items.count - 1, index + 1)
         kept = Set(items[lo...hi].map { $0.vid })
