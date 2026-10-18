@@ -301,7 +301,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             p.isHidden = false
             p.frame = CGRect(x: 0, y: CGFloat(idx) * h, width: w, height: h)
             bind(p, idx)
-            p.setActive(idx == settledPage)
+            // 只有当前页需要激活；其它页保持暂停，避免反复 play 把画面打回队首
+            if idx == settledPage {
+                p.setActive(true)
+            }
         }
 
         for p in free {
@@ -360,13 +363,14 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             settledPage = page
             pool?.keep(items, around: page)
             syncPages()
+            // 只在这里做一次播放控制，不再重复
             if !pausedNow { pool?.focus(on: items, index: page) }
             onIndexChange?(page)
         }
 
-        for p in pages where p.pageIndex >= 0 {
-            p.setActive(p.pageIndex == page)
-            if p.pageIndex == page { p.refreshState() }
+        // 只刷新当前页的状态显示，不再重复 setActive（会导致画面跳回第一帧）
+        for p in pages where p.pageIndex == page {
+            p.refreshState()
         }
         prefetchAhead(from: page)
     }
