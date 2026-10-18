@@ -2,15 +2,20 @@
 //  PlayerStage.swift
 //  DouyinLocal
 //
-//  原生分页滚动 + AVPlayerLayer 挂载。
+//  原生分页滚动 + AVPlayerLayer 挂载 + 手势。
 //
 //  为什么不用 SwiftUI ScrollView：
 //   · 抖音的手感依赖 UIScrollView 原生减速曲线和 rubber-band
 //   · 需要在手指拖动过程中就知道目标页，提前切换播放器
 //
-//  layer 挂载策略：
-//   videoHost 是 self 的直接子视图（不放进 scrollView），铺满整屏。
-//   所以视频画面永远居中显示，不会被滚动带偏。
+//  手势设计（关键）：
+//   · 滚动由 UIScrollView 自己处理（不再被透明层拦截）
+//   · 单击 / 双击用 UITapGestureRecognizer 挂在 UIScrollView 上
+//   · 双击优先于单击：singleTap 设置 require(toFail: doubleTap)
+//
+//  layer 挂载：
+//   videoHost 是 self 的直接子视图（不放进 scrollView），铺满整屏，
+//   所以视频画面永远居中，不会被滚动带偏。
 //
 
 import SwiftUI
@@ -21,26 +26,19 @@ struct PlayerStage: UIViewRepresentable {
     let pool: PlayerPool
     @Binding var index: Int
     let paused: Bool
+    var onTap: () -> Void = {}
+    var onDoubleTap: (CGPoint) -> Void = { _ in }
 
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
-        v.onIndexChange = { newIndex in
-            DispatchQueue.main.async {
-                if index != newIndex { index = newIndex }
-            }
-        }
+        bindCallbacks(v)
         v.attachPool(pool)
         v.configure(items: items)
         return v
     }
 
     func updateUIView(_ v: StageView, context: Context) {
-        // 回调闭包每次都刷新，确保拿到最新的 Binding
-        v.onIndexChange = { newIndex in
-            DispatchQueue.main.async {
-                if index != newIndex { index = newIndex }
-            }
-        }
+        bindCallbacks(v)
         v.attachPool(pool)
         v.applyPaused(paused)
         if v.itemsCount != items.count {
@@ -50,24 +48,36 @@ struct PlayerStage: UIViewRepresentable {
             v.scrollTo(index, animated: false)
         }
     }
+
+    private func bindCallbacks(_ v: StageView) {
+        v.onIndexChange = { newIndex in
+            DispatchQueue.main.async {
+                if index != newIndex { index = newIndex }
+            }
+        }
+        v.onTap = {
+            DispatchQueue.main.async { onTap() }
+        }
+        v.onDoubleTap = { p in
+            DispatchQueue.main.async { onDoubleTap(p) }
+        }
+    }
 }
 
 // MARK: -
 
-final class StageView: UIView, UIScrollViewDelegate {
+final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     private let scrollView = UIScrollView()
-    /// 视频画面宿主：直接挂在 self 上，不受滚动影响
     private let videoHost = UIView()
 
     private var pool: PlayerPool?
     private var attached = false
 
-    /// 页变化回调（由 SwiftUI 层设置）
     var onIndexChange: ((Int) -> Void)?
+    var onTap: (() -> Void)?
+    var onDoubleTap: ((CGPoint) -> Void)?
 
-    /// 当前页（只由滚动驱动，不反向绑定 Binding）
     private(set) var currentPage: Int = 0
-
     private(set) var itemsCount = 0
     private var pausedNow = false
 
@@ -86,11 +96,36 @@ final class StageView: UIView, UIScrollViewDelegate {
         scrollView.decelerationRate = .fast
         scrollView.delegate = self
         scrollView.backgroundColor = .clear
+        scrollView.alwaysBounceVertical = true
         scrollView.isScrollEnabled = true
         addSubview(scrollView)
+
+        // 单击 / 双击
+        let single = UITapGestureRecognizer(target: self, action: #selector(handleSingle))
+        single.numberOfTapsRequired = 1
+        let double = UITapGestureRecognizer(target: self, action: #selector(handleDouble(_:)))
+        double.numberOfTapsRequired = 2
+        single.require(toFail: double)
+        for g in [single, double] {
+            g.delegate = self
+            g.cancelsTouchesInView = false
+            scrollView.addGestureRecognizer(g)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func handleSingle() { onTap?() }
+
+    @objc private func handleDouble(_ g: UITapGestureRecognizer) {
+        onDoubleTap?(g.location(in: self))
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        // 与 UIScrollView 的 pan 同时存在，但抬手后仍能触发点击
+        true
+    }
 
     func attachPool(_ p: PlayerPool) {
         pool = p
@@ -106,7 +141,10 @@ final class StageView: UIView, UIScrollViewDelegate {
         scrollView.frame = bounds
         pool?.syncLayerFrames(videoHost.bounds)
         let h = bounds.height * CGFloat(max(itemsCount, 1))
-        scrollView.contentSize = CGSize(width: bounds.width, height: h)
+        let size = CGSize(width: bounds.width, height: h)
+        if scrollView.contentSize != size {
+            scrollView.contentSize = size
+        }
     }
 
     func configure(items: [FeedItem]) {
@@ -153,6 +191,9 @@ final class StageView: UIView, UIScrollViewDelegate {
         guard bounds.height > 0, itemsCount > 0 else { return }
         let page = Int((sv.contentOffset.y / bounds.height).rounded())
         let clamped = max(0, min(page, itemsCount - 1))
-        if clamped != currentPage { currentPage = clamped; onIndexChange?(clamped) }
+        if clamped != currentPage {
+            currentPage = clamped
+            onIndexChange?(clamped)
+        }
     }
 }
