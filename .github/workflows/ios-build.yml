@@ -51,10 +51,16 @@ jobs:
         if: always()
         run: |
           if [ -f build.log ]; then
+            echo "===== 日志行数 ====="
+            wc -l build.log
+            echo "===== BUILD SUCCEEDED 计数 ====="
+            grep -c "BUILD SUCCEEDED" build.log || true
             echo "===== error: 行 ====="
-            grep -n "error:" build.log | head -50 || echo "(无)"
+            grep -n "error:" build.log | head -50 || echo "(无 error: 行)"
             echo "===== 失败命令 ====="
             grep -n -A8 "The following build commands failed" build.log | head -40 || true
+            echo "===== 尾部 60 行 ====="
+            tail -60 build.log
           else
             echo "build.log 不存在"
           fi
@@ -69,7 +75,6 @@ jobs:
           if-no-files-found: warn
 
       - name: 打包 IPA
-        if: steps.build.outcome == 'success'
         run: |
           set -e
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
@@ -80,7 +85,6 @@ jobs:
           ls -lh DouyinLocal-unsigned.ipa
 
       - name: 上传 IPA
-        if: steps.build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
