@@ -215,15 +215,29 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         prefetchAhead(from: settledPage)
     }
 
-    /// 提前准备后面几条的「真实第 0 帧」和封面，滑动时就不会黑
+    /// 预取窗口：前 1 条 + 后 5 条
+    ///  · 第一帧图片（服务端预生成，最快）
+    ///  · 封面（最后兜底）
+    ///  · 设备现场解帧（服务端还没生成时的补充）
     private func prefetchAhead(from page: Int) {
         guard !items.isEmpty else { return }
-        let lo = max(0, page + 1)
-        let hi = min(items.count - 1, page + 4)
+        let lo = max(0, page - 1)
+        let hi = min(items.count - 1, page + 5)
         guard lo <= hi else { return }
         let slice = Array(items[lo...hi])
-        FramePrefetcher.shared.prefetch(slice)
+
+        let frameURLs = slice.compactMap { APIClient.frameURL($0.vid) }
+        ImageCache.shared.prefetch(frameURLs)
         ImageCache.shared.prefetch(slice.compactMap { $0.coverURL })
+
+        // 服务端还没有这张第一帧时，才让设备去解
+        let missing = slice.filter { it in
+            guard let u = APIClient.frameURL(it.vid) else { return false }
+            return ImageCache.shared.get(u) == nil
+        }
+        if !missing.isEmpty {
+            FramePrefetcher.shared.prefetch(Array(missing.prefix(2)))
+        }
     }
 
     func jumpTo(_ i: Int) {
