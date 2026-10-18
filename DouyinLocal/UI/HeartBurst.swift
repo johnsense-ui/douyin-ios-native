@@ -8,7 +8,7 @@
 
 import SwiftUI
 
-struct HeartBurst: View, Equatable {
+struct HeartBurst: View, Equatable, Identifiable {
     let id: UUID
     let position: CGPoint
 
