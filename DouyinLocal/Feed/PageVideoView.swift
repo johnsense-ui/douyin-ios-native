@@ -84,7 +84,6 @@ final class RailItem: UIView {
         button.setImage(UIImage(systemName: systemName,
                                 withConfiguration: UIImage.SymbolConfiguration(
                                     pointSize: iconSize, weight: .regular)), for: .normal)
-        button.imageView?.contentType = .scaleAspectFit
         button.layer.shadowColor = UIColor.black.cgColor
         button.layer.shadowOpacity = 0.4
         button.layer.shadowRadius = 3
@@ -148,7 +147,7 @@ final class PageVideoView: UIView {
     private var displayObs: NSKeyValueObservation?
     private var timeObs: Any?
 
-    private(set) var pageIndex: Int = -1
+    var pageIndex: Int = -1
     private(set) var vid: String = ""
     private var item: FeedItem?
 
