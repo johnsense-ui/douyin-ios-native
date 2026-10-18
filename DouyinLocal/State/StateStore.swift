@@ -1,4 +1,4 @@
-//
+﻿//
 //  StateStore.swift
 //  DouyinLocal
 //
@@ -44,6 +44,7 @@ final class StateStore: ObservableObject {
         d.set(Array(liked), forKey: likedKey)
         d.set(Array(saved), forKey: savedKey)
         d.set(Array(following), forKey: followKey)
+        NotificationCenter.default.post(name: .douyinStateChanged, object: nil)
     }
 
     // MARK: - 查询
@@ -138,4 +139,9 @@ final class StateStore: ObservableObject {
         pendingFollow.removeAll()
         await APIClient.shared.pushState(liked: l, saved: s, following: f)
     }
+}
+
+extension Notification.Name {
+    /// 点赞/收藏/关注发生变化
+    static let douyinStateChanged = Notification.Name("douyin.state.changed")
 }
