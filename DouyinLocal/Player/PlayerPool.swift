@@ -18,7 +18,7 @@ import UIKit
 
 /// 一个播放槽
 final class PlayerSlot: NSObject {
-    let player = AVPlayer()
+    let player = AVQueuePlayer()
     private(set) var vid: String?
     private(set) var ready = false
 
@@ -30,7 +30,8 @@ final class PlayerSlot: NSObject {
     var loopEnabled = true
 
     private var statusObs: NSKeyValueObservation?
-    private var loopObs: NSObjectProtocol?
+    private var looper: AVPlayerLooper?
+    private var loopEndObs: NSObjectProtocol?
 
     override init() {
         super.init()
@@ -50,7 +51,7 @@ final class PlayerSlot: NSObject {
         if url.isFileURL { VideoCache.shared.pin(item.vid) }
 
         let pi = AVPlayerItem(url: url)
-        pi.preferredForwardBufferDuration = 3.0
+        pi.preferredForwardBufferDuration = 2.0
 
         statusObs = pi.observe(\.status, options: [.new, .initial]) { [weak self] it, _ in
             guard let self else { return }
@@ -61,20 +62,21 @@ final class PlayerSlot: NSObject {
                 if ok, let v = self.vid { self.onReady?(v) }
             }
         }
-        player.replaceCurrentItem(with: pi)
 
-        loopObs = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: pi, queue: .main) { [weak self] _ in
-                guard let self else { return }
-                if self.loopEnabled {
-                    self.player.seek(to: .zero)
-                    self.player.play()
-                } else {
+        player.removeAllItems()
+        // AVPlayerLooper 内部维护队列，循环不需要 seek，真正无缝
+        looper = AVPlayerLooper(player: player, templateItem: pi)
+
+        if !loopEnabled {
+            looper?.disableLooping()
+            loopEndObs = NotificationCenter.default.addObserver(
+                forName: .AVPlayerItemDidPlayToEndTime,
+                object: pi, queue: .main) { [weak self] _ in
+                    guard let self else { return }
                     self.player.pause()
                     if let v = self.vid { self.onEnd?(v) }
                 }
-            }
+        }
     }
 
     /// 停在第一帧，让解码器把画面解出来
@@ -83,25 +85,28 @@ final class PlayerSlot: NSObject {
         player.playImmediately(atRate: 0)
     }
 
-    func play() { player.play() }
+    func play() { player.playImmediately(atRate: 1.0) }
     func pause() { player.pause() }
 
     func clear() {
         player.pause()
         statusObs?.invalidate()
         statusObs = nil
-        if let o = loopObs {
+        if let o = loopEndObs {
             NotificationCenter.default.removeObserver(o)
-            loopObs = nil
+            loopEndObs = nil
         }
-        player.replaceCurrentItem(with: nil)
+        looper?.disableLooping()
+        looper = nil
+        player.removeAllItems()
         vid = nil
         ready = false
     }
 
     deinit {
         statusObs?.invalidate()
-        if let o = loopObs { NotificationCenter.default.removeObserver(o) }
+        if let o = loopEndObs { NotificationCenter.default.removeObserver(o) }
+        looper?.disableLooping()
     }
 }
 
