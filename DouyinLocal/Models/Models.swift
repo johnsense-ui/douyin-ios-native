@@ -1,4 +1,4 @@
-//
+﻿//
 //  Models.swift
 //  DouyinLocal
 //
@@ -28,7 +28,7 @@ struct FeedItem: Decodable, Identifiable, Hashable {
     var coverURL: URL? { URL(string: cover) }
 
     /// 从九宫格构造占位（无视频地址）
-    static func placeholder(from g: GridItem, authorId: String, author: String) -> FeedItem {
+    static func placeholder(from g: VideoThumb, authorId: String, author: String) -> FeedItem {
         FeedItem(vid: g.vid, caption: g.caption, authorId: authorId, author: author,
                  digg: g.digg, createTime: 0, video: "", cover: g.cover,
                  source: "", liked: false, saved: false)
@@ -83,7 +83,7 @@ struct AuthorDetail: Decodable {
     let total: Int
     let offset: Int
     let limit: Int
-    let items: [GridItem]
+    let items: [VideoThumb]
 }
 
 /// 作者作品（含视频地址，可直接播放）
@@ -98,7 +98,7 @@ struct FeedAuthorPage: Decodable {
 
 // MARK: - 九宫格
 
-struct GridItem: Decodable, Identifiable, Hashable {
+struct VideoThumb: Decodable, Identifiable, Hashable {
     let vid: String
     let cover: String
     let digg: Int
@@ -127,7 +127,7 @@ struct SearchResult: Decodable {
     let q: String
     let authors: [Author]
     let authorTotal: Int
-    let videos: [GridItem]
+    let videos: [VideoThumb]
     let videoTotal: Int
 }
 
