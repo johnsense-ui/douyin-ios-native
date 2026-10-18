@@ -12,6 +12,9 @@ struct SettingsView: View {
     @ObservedObject private var s = AppSettings.shared
 
     @State private var server = APIClient.baseURL.absoluteString
+    @State private var stats: ServerStats?
+    @State private var scanning = false
+    @State private var scanMsg: String?
     @State private var testing = false
     @State private var testResult: String?
 
@@ -109,6 +112,60 @@ struct SettingsView: View {
                             }
                         }
 
+                        // 视频库
+                        section("视频库") {
+                            row("当前视频数",
+                                subtitle: stats.map { "作者 \($0.authors) 位 · 有作品 \($0.authorsWithVideo) 位" }
+                                          ?? "点下面按钮刷新") {
+                                Text(stats.map { "\($0.videos)" } ?? "—")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(.white)
+                            }
+                            divider
+                            row("启动时自动扫描", subtitle: "打开 App 时检查电脑上新增的视频") {
+                                Toggle("", isOn: Binding(
+                                    get: { s.autoScan },
+                                    set: { s.autoScan = $0 }))
+                                .labelsHidden()
+                                .tint(Theme.primary)
+                            }
+                            divider
+                            VStack(alignment: .leading, spacing: 9) {
+                                Button {
+                                    rescan()
+                                } label: {
+                                    HStack(spacing: 7) {
+                                        if scanning {
+                                            ProgressView().tint(.white).scaleEffect(0.7)
+                                        } else {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 13, weight: .semibold))
+                                        }
+                                        Text(scanning ? "正在扫描…" : "重新扫描视频库")
+                                            .font(.system(size: 14.5, weight: .medium))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 38)
+                                    .background(RoundedRectangle(cornerRadius: 8)
+                                        .fill(Theme.primary))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(scanning)
+
+                                if let m = scanMsg {
+                                    Text(m)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(m.hasPrefix("✓") ? .green : Theme.primary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                } else {
+                                    Text("电脑上新增的视频，重扫一次就能看到")
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Theme.textTertiary)
+                                }
+                            }
+                            .padding(.vertical, 9)
+                        }
                         // 服务器
                         section("服务器") {
                             VStack(alignment: .leading, spacing: 10) {
@@ -179,6 +236,7 @@ struct SettingsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
+        .onAppear { loadStats() }
     }
 
     // MARK: - 组件
@@ -219,6 +277,43 @@ struct SettingsView: View {
         Rectangle()
             .fill(Color.white.opacity(0.07))
             .frame(height: 1)
+    }
+
+    // MARK: - 视频库
+
+    private func loadStats() {
+        Task {
+            if let st = try? await APIClient.shared.stats() {
+                await MainActor.run { stats = st }
+            }
+        }
+    }
+
+    private func rescan() {
+        scanning = true
+        scanMsg = nil
+        Task {
+            do {
+                let r = try await APIClient.shared.rescan()
+                let st = try? await APIClient.shared.stats()
+                await MainActor.run {
+                    scanning = false
+                    if let st { stats = st }
+                    if r.added == 0 && r.removed == 0 {
+                        scanMsg = "✓ 没有新增视频（当前 \(r.after) 个）"
+                    } else {
+                        scanMsg = "✓ 扫描完成：新增 \(r.added) 个" +
+                                  (r.removed > 0 ? "，移除 \(r.removed) 个" : "") +
+                                  "，共 \(r.after) 个（\(String(format: "%.1f", r.elapsed)) 秒）"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    scanning = false
+                    scanMsg = "扫描失败：\(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     // MARK: - 服务器测试
