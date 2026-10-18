@@ -113,11 +113,20 @@ final class PlayerPool: ObservableObject {
     func attach(to container: UIView) {
         for (i, s) in slots.enumerated() {
             s.layer.frame = container.bounds
-            s.layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
             s.layer.zPosition = CGFloat(i)
             container.layer.addSublayer(s.layer)
         }
         showActive()
+    }
+
+    /// 容器尺寸变化时手动同步（CALayer 不会自动跟随 UIView）
+    func syncLayerFrames(_ bounds: CGRect) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for s in slots {
+            s.layer.frame = bounds
+        }
+        CATransaction.commit()
     }
 
     private func showActive() {
