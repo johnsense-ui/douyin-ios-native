@@ -1,4 +1,4 @@
-//
+﻿//
 //  FeedView.swift
 //  DouyinLocal
 //
@@ -44,32 +44,8 @@ struct FeedView: View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            PlayerStage(items: store.items,
-                        pool: pool,
-                        index: $index,
-                        paused: paused,
-                        onTap: {
-                            paused.toggle()
-                            if paused {
-                                pool.pause()
-                            } else if index < store.items.count {
-                                pool.resume(store.items[index].vid)
-                            }
-                        },
-                        onDoubleTap: { loc in
-                            guard index < store.items.count else { return }
-                            hearts.pop(at: loc)
-                            let vid = store.items[index].vid
-                            if !state.isLiked(vid) { state.toggleLike(vid) }
-                        },
-                        onLike: { vid in state.toggleLike(vid) },
-                        onSave: { vid in state.toggleSave(vid) },
-                        onAuthor: { aid in route = .author(aid) },
-                        onSwipeLeft: { i in
-                            guard i < store.items.count else { return }
-                            openSlideAuthor(store.items[i].authorId)
-                        })
-            .ignoresSafeArea()
+            stageView
+                .ignoresSafeArea()
 
             ForEach(hearts.bursts) { $0 }
 
@@ -165,6 +141,39 @@ struct FeedView: View {
         }
     }
 
+    private var stageView: some View {
+        PlayerStage(items: store.items,
+                    pool: pool,
+                    index: $index,
+                    paused: paused,
+                    onTap: handleTap,
+                    onDoubleTap: handleDoubleTap,
+                    onLike: { state.toggleLike($0) },
+                    onSave: { state.toggleSave($0) },
+                    onAuthor: { route = .author($0) },
+                    onSwipeLeft: handleSwipeLeft)
+    }
+
+    private func handleTap() {
+        paused.toggle()
+        if paused {
+            pool.pause()
+        } else if index < store.items.count {
+            pool.resume(store.items[index].vid)
+        }
+    }
+
+    private func handleDoubleTap(_ loc: CGPoint) {
+        guard index < store.items.count else { return }
+        hearts.pop(at: loc)
+        let vid = store.items[index].vid
+        if !state.isLiked(vid) { state.toggleLike(vid) }
+    }
+
+    private func handleSwipeLeft(_ i: Int) {
+        guard i < store.items.count else { return }
+        openSlideAuthor(store.items[i].authorId)
+    }
     private func openSlideAuthor(_ aid: String) {
         withAnimation(.easeOut(duration: 0.22)) {
             slideAuthor = aid
