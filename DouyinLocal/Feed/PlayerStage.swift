@@ -212,6 +212,18 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         pool?.keep(items, around: settledPage)
         syncPages()
         pool?.focus(on: items, index: settledPage)
+        prefetchAhead(from: settledPage)
+    }
+
+    /// 提前准备后面几条的「真实第 0 帧」和封面，滑动时就不会黑
+    private func prefetchAhead(from page: Int) {
+        guard !items.isEmpty else { return }
+        let lo = max(0, page + 1)
+        let hi = min(items.count - 1, page + 4)
+        guard lo <= hi else { return }
+        let slice = Array(items[lo...hi])
+        FramePrefetcher.shared.prefetch(slice)
+        ImageCache.shared.prefetch(slice.compactMap { $0.coverURL })
     }
 
     func jumpTo(_ i: Int) {
@@ -335,6 +347,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             p.setActive(p.pageIndex == page)
             if p.pageIndex == page { p.refreshState() }
         }
+        prefetchAhead(from: page)
     }
 
     // MARK: 播放结束
