@@ -3,6 +3,8 @@ name: ios-build
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "ci-status.txt"
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +15,8 @@ jobs:
   build:
     runs-on: macos-15
     timeout-minutes: 45
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +59,29 @@ jobs:
           rc=${PIPESTATUS[0]}
           echo "xcodebuild rc=$rc"
           exit $rc
+
+      - name: 把错误写进仓库文件（便于外部读取）
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo "run: ${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "time: $(date -u)"
+            echo "=== BUILD ==="
+            grep -E "BUILD (SUCCEEDED|FAILED)" build.log | tail -2 || echo "(none)"
+            echo "=== ERRORS ==="
+            grep -n "error:" build.log | head -80 || echo "(none)"
+            echo "=== FAILED COMMANDS ==="
+            grep -n -A10 "The following build commands failed" build.log | head -50 || true
+            echo "=== TAIL 80 ==="
+            tail -80 build.log
+          } > ci-status.txt
+          git config user.email "ci@github.com"
+          git config user.name "CI Bot"
+          git add ci-status.txt
+          git commit -m "ci: build status [skip ci]" || true
+          git push || true
 
       - name: 4-检查产物
         run: |
