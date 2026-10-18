@@ -79,13 +79,22 @@ final class PlayerSlot: NSObject {
         }
     }
 
-    /// 停在第一帧，让解码器把画面解出来
+    /// 预载：让解码器把首帧解出来。
+    /// 注意：AVPlayerLooper 下不能 seek，也不要在已就绪时反复调用，
+    /// 否则会让视频轨重置回队首（表现为画面跳回第一帧）。
     func preloadFrame() {
-        player.seek(to: .zero)
+        guard player.rate <= 0 else { return }
+        guard !ready else { return }
         player.playImmediately(atRate: 0)
     }
 
-    func play() { player.playImmediately(atRate: 1.0) }
+    /// 幂等播放：已经在播就不重复调用。
+    /// AVQueuePlayer + AVPlayerLooper 下重复 playImmediately 会把视频轨切回队首，
+    /// 表现为「画面跳回第一帧、声音继续」。
+    func play() {
+        if player.rate > 0 { return }
+        player.playImmediately(atRate: 1.0)
+    }
     func pause() { player.pause() }
 
     func clear() {
