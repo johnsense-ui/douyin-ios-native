@@ -4,32 +4,49 @@
 //
 //  推荐流主界面。
 //
-//  UI 一致性：所有元素位置固定（不随文案长短漂移），
-//  避免「每次打开长得不一样」的观感。
-//
-//  视频比例：PlayerStage 内部用 resizeAspect，完整显示不拉伸。
+//  对齐抖音：
+//   · 拖动时视频与叠加 UI 一起 1:1 移动（下一頁的第一帧从下方进来）
+//   · 旧视频在拖动期间继续播放，落位后才切换
+//   · 右栏/文案属于「页」，跟着滚；底部 tab 与搜索按钮固定
+//   · 二级页（作者/搜索/我的/设置）全屏，进入时暂停推荐流，返回恢复原视频
 //
 
 import SwiftUI
-import UIKit
 
-/// 拖动状态。只在跨越阈值时翻转一次，避免每帧重绘拖慢视频。
+/// 拖动偏移（单位：页）
 final class ScrollPhase: ObservableObject {
-    @Published var dragging = false
+    @Published var delta: CGFloat = 0
+}
+
+/// 二级页路由
+enum FeedRoute: Identifiable, Equatable {
+    case author(String)
+    case search
+    case profile
+    case settings
+
+    var id: String {
+        switch self {
+        case .author(let a): return "author-\(a)"
+        case .search: return "search"
+        case .profile: return "profile"
+        case .settings: return "settings"
+        }
+    }
 }
 
 struct FeedView: View {
     @StateObject private var store = FeedStore()
     @StateObject private var pool = PlayerPool()
     @StateObject private var hearts = HeartBurstManager()
-    @StateObject private var phase = ScrollPhase()
+    /// 用 @State 而非 @StateObject：拖动时只让叠加 UI 重绘，不重绘整页
+    @State private var phase = ScrollPhase()
     @ObservedObject private var state = StateStore.shared
+    @ObservedObject private var settings = AppSettings.shared
 
     @State private var index = 0
     @State private var paused = false
-    @State private var showAuthor: AuthorTarget?
-    @State private var showSearch = false
-    @State private var showProfile = false
+    @State private var route: FeedRoute?
 
     var body: some View {
         ZStack {
@@ -53,9 +70,8 @@ struct FeedView: View {
                             let vid = store.items[index].vid
                             if !state.isLiked(vid) { state.toggleLike(vid) }
                         },
-                        onProgress: { p in
-                            let d = abs(p) > 0.12
-                            if phase.dragging != d { phase.dragging = d }
+                        onDelta: { d in
+                            phase.delta = d
                         })
             .ignoresSafeArea()
 
@@ -68,32 +84,18 @@ struct FeedView: View {
                     .allowsHitTesting(false)
             }
 
-            // 叠加 UI（跟随滚动淡出，切页时不打架）
             FeedOverlayUI(phase: phase,
-                          item: index < store.items.count ? store.items[index] : nil,
-                          paused: $paused,
-                          onAuthor: {
-                              if index < store.items.count {
-                                  showAuthor = AuthorTarget(id: store.items[index].authorId)
-                              }
-                          },
-                          onLike: {
-                              if index < store.items.count {
-                                  state.toggleLike(store.items[index].vid)
-                              }
-                          },
-                          onSave: {
-                              if index < store.items.count {
-                                  state.toggleSave(store.items[index].vid)
-                              }
-                          },
-                          onSearch: { showSearch = true },
-                          onProfile: { showProfile = true })
+                          items: store.items,
+                          settled: index,
+                          onAuthor: { aid in route = .author(aid) },
+                          onLike: { vid in state.toggleLike(vid) },
+                          onSave: { vid in state.toggleSave(vid) },
+                          onSearch: { route = .search },
+                          onProfile: { route = .profile },
+                          onSettings: { route = .settings })
         }
         .statusBarHidden(true)
-        .onAppear {
-            Task { await store.reload() }
-        }
+        .onAppear { Task { await store.reload() } }
         .onChange(of: store.items.count) { _, _ in
             if index < store.items.count {
                 pool.focus(on: store.items, index: index)
@@ -105,149 +107,96 @@ struct FeedView: View {
             store.ensureMore(currentIndex: new)
             paused = false
         }
-        .sheet(item: $showAuthor) { t in
-            AuthorView(authorId: t.id)
+        .onChange(of: settings.pageSize) { _, _ in Task { await store.reload() } }
+        .onChange(of: settings.algo) { _, _ in Task { await store.reload() } }
+        .onChange(of: route) { _, r in
+            // 进二级页：停声；回来：原视频继续
+            if r != nil {
+                pool.pause()
+            } else if !paused, index < store.items.count {
+                pool.resume(store.items[index].vid)
+            }
         }
-        .sheet(isPresented: $showSearch) { SearchView() }
-        .sheet(isPresented: $showProfile) { ProfileView() }
+        .fullScreenCover(item: $route) { r in
+            switch r {
+            case .author(let aid):
+                AuthorView(authorId: aid)
+            case .search:
+                SearchView()
+            case .profile:
+                ProfileView()
+            case .settings:
+                SettingsView()
+            }
+        }
     }
 }
 
-// MARK: - 叠加 UI（位置全部固定）
+// MARK: - 叠加 UI
 
 struct FeedOverlayUI: View {
     @ObservedObject var phase: ScrollPhase
-    let item: FeedItem?
-    @Binding var paused: Bool
-    let onAuthor: () -> Void
-    let onLike: () -> Void
-    let onSave: () -> Void
+    let items: [FeedItem]
+    let settled: Int
+    let onAuthor: (String) -> Void
+    let onLike: (String) -> Void
+    let onSave: (String) -> Void
     let onSearch: () -> Void
     let onProfile: () -> Void
-
-    @ObservedObject private var state = StateStore.shared
-    @State private var expanded = false
-
-    /// 拖动中隐藏 UI，落位后回来（只有两次状态切换，不影响帧率）
-    private var fade: Double { phase.dragging ? 0 : 1 }
+    let onSettings: () -> Void
 
     var body: some View {
-        ZStack {
-            // 顶部搜索
-            VStack {
-                HStack {
-                    Button(action: onSearch) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.5), radius: 4)
+        GeometryReader { geo in
+            let h = geo.size.height
+            ZStack {
+                // 页面级 UI：跟着滚动位移
+                ForEach([-1, 0, 1], id: \.self) { d in
+                    let idx = settled + d
+                    if idx >= 0 && idx < items.count {
+                        FeedPageUI(item: items[idx],
+                                   onAuthor: { onAuthor(items[idx].authorId) },
+                                   onLike: { onLike(items[idx].vid) },
+                                   onSave: { onSave(items[idx].vid) })
+                            .frame(width: geo.size.width, height: h)
+                            .offset(y: (CGFloat(d) - phase.delta) * h)
                     }
-                    .buttonStyle(.plain)
-                    Spacer()
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 6)
-                Spacer()
-            }
-            .opacity(0.3 + 0.7 * fade)
 
-            // 右侧操作栏：固定宽度 + 固定底距
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                if let item {
-                    VStack(spacing: 16) {
-                        Spacer(minLength: 0)
-                        Button(action: onAuthor) {
-                            UserAvatar(name: item.author, size: 46)
+                // 顶栏（固定）
+                VStack {
+                    HStack(spacing: 16) {
+                        Button(action: onSettings) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 20, weight: .medium))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.5), radius: 4)
                         }
                         .buttonStyle(.plain)
-                        .overlay(alignment: .bottom) {
-                            if !state.isFollowing(item.authorId) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(width: 19, height: 19)
-                                    .background(Circle().fill(Theme.primary))
-                                    .offset(y: 9)
-                            }
+                        Spacer()
+                        Button(action: onSearch) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 22, weight: .medium))
+                                .foregroundStyle(.white)
+                                .shadow(color: .black.opacity(0.5), radius: 4)
                         }
-                        .padding(.bottom, 8)
-
-                        ActionButton(systemImage: "heart.fill",
-                                     label: item.diggText,
-                                     tint: state.isLiked(item.vid) ? Theme.likeRed : .white,
-                                     filled: state.isLiked(item.vid),
-                                     action: onLike)
-
-                        ActionButton(systemImage: "arrowshape.turn.up.right.fill",
-                                     label: "分享", action: {})
-
-                        ActionButton(systemImage: "bookmark.fill",
-                                     label: "收藏",
-                                     tint: state.isSaved(item.vid) ? .yellow : .white,
-                                     filled: state.isSaved(item.vid),
-                                     action: onSave)
-
-                        Spacer().frame(height: 76)
+                        .buttonStyle(.plain)
                     }
-                    .frame(width: 64)
-                    .padding(.trailing, 4)
-                    .opacity(fade)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 6)
+                    Spacer()
                 }
-            }
 
-            // 左下文案：固定高度区块，底对齐
-            VStack {
-                Spacer()
-                HStack(alignment: .bottom) {
-                    if let item {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Button(action: onAuthor) {
-                                HStack(spacing: 9) {
-                                    UserAvatar(name: item.author, size: 38)
-                                    Text("@\(item.author)")
-                                        .font(.system(size: 15.5, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-
-                            if !item.caption.isEmpty {
-                                Text(item.caption)
-                                    .font(.system(size: 14.5))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(expanded ? nil : 2)
-                                    .multilineTextAlignment(.leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .onTapGesture {
-                                        withAnimation(.easeInOut(duration: 0.16)) {
-                                            expanded.toggle()
-                                        }
-                                    }
-                            }
-                        }
-                        .frame(height: 92, alignment: .bottom)
+                // 底部 tab（固定）
+                VStack {
+                    Spacer()
+                    HStack(spacing: 52) {
+                        tabItem("推荐", selected: true) {}
+                        tabItem("我的", selected: false) { onProfile() }
                     }
-                    Spacer(minLength: 0)
+                    .padding(.bottom, 8)
                 }
-                .padding(.leading, 14)
-                .padding(.trailing, 96)
-                .padding(.bottom, 58)
-                .opacity(fade)
-            }
-
-            // 底部 tab：固定位置
-            VStack {
-                Spacer()
-                HStack(spacing: 52) {
-                    tabItem("推荐", selected: true) {}
-                    tabItem("我的", selected: false) { onProfile() }
-                }
-                .padding(.bottom, 8)
             }
         }
-        .animation(.easeOut(duration: 0.12), value: fade)
     }
 
     private func tabItem(_ title: String, selected: Bool,
@@ -268,7 +217,104 @@ struct FeedOverlayUI: View {
     }
 }
 
-// MARK: - 圆形头像（昵称首字）
+// MARK: - 单页 UI（文案 + 右栏）
+
+private struct FeedPageUI: View {
+    let item: FeedItem
+    let onAuthor: () -> Void
+    let onLike: () -> Void
+    let onSave: () -> Void
+
+    @ObservedObject private var state = StateStore.shared
+    @State private var expanded = false
+
+    var body: some View {
+        ZStack {
+            // 右侧操作栏
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                VStack(spacing: 16) {
+                    Spacer(minLength: 0)
+
+                    Button(action: onAuthor) {
+                        UserAvatar(name: item.author, size: 46)
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .bottom) {
+                        if !state.isFollowing(item.authorId) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 19, height: 19)
+                                .background(Circle().fill(Theme.primary))
+                                .offset(y: 9)
+                        }
+                    }
+                    .padding(.bottom, 8)
+
+                    ActionButton(systemImage: "heart.fill",
+                                 label: item.diggText,
+                                 tint: state.isLiked(item.vid) ? Theme.likeRed : .white,
+                                 filled: state.isLiked(item.vid),
+                                 action: onLike)
+
+                    ActionButton(systemImage: "arrowshape.turn.up.right.fill",
+                                 label: "分享", action: {})
+
+                    ActionButton(systemImage: "bookmark.fill",
+                                 label: "收藏",
+                                 tint: state.isSaved(item.vid) ? .yellow : .white,
+                                 filled: state.isSaved(item.vid),
+                                 action: onSave)
+
+                    Spacer().frame(height: 76)
+                }
+                .frame(width: 64)
+                .padding(.trailing, 4)
+            }
+
+            // 左下文案
+            VStack {
+                Spacer()
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Button(action: onAuthor) {
+                            HStack(spacing: 9) {
+                                UserAvatar(name: item.author, size: 38)
+                                Text("@\(item.author)")
+                                    .font(.system(size: 15.5, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        if !item.caption.isEmpty {
+                            Text(item.caption)
+                                .font(.system(size: 14.5))
+                                .foregroundStyle(.white)
+                                .lineLimit(expanded ? nil : 2)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .onTapGesture {
+                                    withAnimation(.easeInOut(duration: 0.16)) {
+                                        expanded.toggle()
+                                    }
+                                }
+                        }
+                    }
+                    .frame(height: 92, alignment: .bottom)
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, 14)
+                .padding(.trailing, 96)
+                .padding(.bottom, 58)
+            }
+        }
+    }
+}
+
+// MARK: - 圆形头像
 
 struct UserAvatar: View {
     let name: String
