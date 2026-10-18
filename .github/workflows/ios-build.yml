@@ -17,22 +17,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 环境
+      - name: 1-环境与结构
         run: |
+          set -e
           xcodebuild -version
-          pwd
+          echo "PWD=$(pwd)"
           ls -la
+          echo "--- xcodeproj ---"
+          ls -la DouyinLocal.xcodeproj
+          echo "--- schemes ---"
+          ls -la DouyinLocal.xcodeproj/xcshareddata/xcschemes || true
 
-      - name: 工程信息
+      - name: 2-xcodebuild -list
         run: |
-          xcodebuild -list -project DouyinLocal.xcodeproj 2>&1
+          set -e
+          xcodebuild -list -project DouyinLocal.xcodeproj 2>&1 | tee list.txt
+          echo "----- 是否有 DouyinLocal scheme -----"
+          grep -q "DouyinLocal" list.txt || (echo "!! scheme 未识别"; exit 1)
 
-      - name: 编译
-        id: build
-        continue-on-error: true
+      - name: 3-真正编译
         run: |
           set -o pipefail
-          xcodebuild build \
+          xcodebuild \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
             -configuration Release \
@@ -44,65 +50,51 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             DEVELOPMENT_TEAM="" \
-            2>&1 | tee build.log | tail -100
-          echo "xcodebuild exit=${PIPESTATUS[0]}"
+            build \
+            2>&1 | tee build.log
+          rc=${PIPESTATUS[0]}
+          echo "xcodebuild rc=$rc"
+          exit $rc
 
-      - name: 提取错误
-        if: always()
-        run: |
-          {
-            echo "## 编译诊断"
-            echo '```'
-            echo "=== build/ 结构 ==="
-            ls -la build 2>&1 || echo "build/ 不存在"
-            ls -la build/Build/Products 2>&1 || echo "Products 不存在"
-            echo
-            echo "=== 日志行数 ==="
-            wc -l build.log 2>&1 || echo "build.log 不存在"
-            echo
-            echo "=== BUILD 结果 ==="
-            grep -E "BUILD (SUCCEEDED|FAILED)" build.log 2>&1 | tail -3 || echo "无 BUILD 行"
-            echo
-            echo "=== error: 行 ==="
-            grep -n "error:" build.log 2>&1 | head -40 || echo "(无)"
-            echo
-            echo "=== 尾部 40 行 ==="
-            tail -40 build.log 2>&1
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 上传编译日志
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: build.log
-          retention-days: 14
-          if-no-files-found: warn
-
-      - name: 打包 IPA
+      - name: 4-检查产物
         run: |
           set -e
-          echo "===== build/ 目录 ====="
-          ls -la build 2>&1 || true
-          echo "===== 查找 .app ====="
-          find build -name "*.app" -maxdepth 6 2>&1 || true
-          echo "===== 查找 .xcarchive ====="
-          find build -name "*.xcarchive" -maxdepth 4 2>&1 || true
-          APP=$(find build -name "*.app" -maxdepth 6 2>/dev/null | head -1)
-          echo "APP=[$APP]"
-          if [ -z "$APP" ]; then
-            echo "!! 没有找到 .app，编译未产出产物"
-            exit 1
-          fi
+          echo "=== build 树（2 层）==="
+          ls -la build || true
+          ls -la build/Build 2>/dev/null || true
+          ls -la build/Build/Products 2>/dev/null || true
+          echo "=== 所有 .app ==="
+          find build -name "*.app" | head
+          N=$(find build -name "*.app" | wc -l)
+          echo "找到 $N 个 .app"
+          [ "$N" -ge 1 ] || (echo "!! 没有产物"; exit 1)
+
+      - name: 5-打包 IPA
+        run: |
+          set -e
+          APP=$(find build -name "*.app" | head -1)
+          echo "APP=$APP"
+          du -sh "$APP"
           rm -rf out && mkdir -p out/Payload
           cp -R "$APP" out/Payload/
+          du -sh out/Payload
           ( cd out && zip -qry ../DouyinLocal-unsigned.ipa Payload )
           ls -lh DouyinLocal-unsigned.ipa
 
-      - name: 上传 IPA
+      - name: 6-上传
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
           path: DouyinLocal-unsigned.ipa
           retention-days: 30
+
+      - name: 7-上传日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            list.txt
+          retention-days: 14
+          if-no-files-found: warn
