@@ -2,37 +2,37 @@
 //  PlayerPool.swift
 //  DouyinLocal
 //
-//  流畅度的核心。
+//  3 个 AVPlayer 的池子（当前 ±1）。
 //
-//  设计要点：
-//   1. 固定 3 个 AVPlayer 槽位（current-1 / current / current+1）
-//   2. 槽位 → layer 一次性挂到同一个容器 view 上，切换只改透明度与 zPosition
-//      —— 不做 replaceCurrentItem 重新挂载，没有黑闪
-//   3. 滑出窗口立即 replaceCurrentItem(nil) 释放解码器
-//   4. 预载的下一条停在 0 秒并 playImmediately(atRate:0)，首帧就绪
+//  设计：
+//   · 槽位只持有 AVPlayer，不再持有 layer
+//     画面交给 PageVideoView 里的 AVPlayerLayer，这样视频能跟着 UIScrollView 一起滚动，
+//     拖动时就能看到下一条的第一帧。
+//   · 默认有声，不做静音。
+//   · 滑出窗口立即 replaceCurrentItem(nil) 释放解码器。
 //
 
 import AVFoundation
+import Combine
 import UIKit
 
-/// 一个可复用的播放槽位
+/// 一个播放槽
 final class PlayerSlot: NSObject {
     let player = AVPlayer()
-    let layer = AVPlayerLayer()
-    var vid: String?
-    var loopObserver: NSObjectProtocol?
-    /// 首帧是否已就绪（用于避免黑闪切换）
-    var isReady = false
-    private var readyObserver: NSKeyValueObservation?
+    private(set) var vid: String?
+    private(set) var ready = false
+
+    /// 首帧就绪回调（在主线程）
+    var onReady: ((String) -> Void)?
+
+    private var statusObs: NSKeyValueObservation?
+    private var loopObs: NSObjectProtocol?
 
     override init() {
         super.init()
         player.actionAtItemEnd = .none
-        player.isMuted = true
         player.automaticallyWaitsToMinimizeStalling = true
-        layer.player = player
-        layer.videoGravity = .resizeAspectFill
-        layer.isHidden = true
+        player.isMuted = false          // 默认有声
     }
 
     func prepare(_ item: FeedItem) {
@@ -40,31 +40,31 @@ final class PlayerSlot: NSObject {
         if vid == item.vid { return }
         clear()
         vid = item.vid
-        isReady = false
 
-        let asset = AVURLAsset(url: url)
-        let playerItem = AVPlayerItem(asset: asset)
-        playerItem.preferredForwardBufferDuration = 2.0
+        let pi = AVPlayerItem(url: url)
+        pi.preferredForwardBufferDuration = 3.0
 
-        readyObserver = playerItem.observe(\.status, options: [.new]) { [weak self] it, _ in
+        statusObs = pi.observe(\.status, options: [.new, .initial]) { [weak self] it, _ in
             guard let self else { return }
-            if it.status == .readyToPlay {
-                DispatchQueue.main.async { self.isReady = true }
+            let ok = (it.status == .readyToPlay)
+            DispatchQueue.main.async {
+                guard self.ready != ok else { return }
+                self.ready = ok
+                if ok, let v = self.vid { self.onReady?(v) }
             }
         }
-        player.replaceCurrentItem(with: playerItem)
+        player.replaceCurrentItem(with: pi)
 
-        loopObserver = NotificationCenter.default.addObserver(
+        loopObs = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main) { [weak self] _ in
+            object: pi, queue: .main) { [weak self] _ in
                 guard let self else { return }
                 self.player.seek(to: .zero)
                 self.player.play()
             }
     }
 
-    /// 预载：停在 0 秒，但让解码器把首帧解出来
+    /// 停在第一帧，让解码器把画面解出来
     func preloadFrame() {
         player.seek(to: .zero)
         player.playImmediately(atRate: 0)
@@ -75,22 +75,20 @@ final class PlayerSlot: NSObject {
 
     func clear() {
         player.pause()
-        readyObserver?.invalidate()
-        readyObserver = nil
-        if let o = loopObserver {
+        statusObs?.invalidate()
+        statusObs = nil
+        if let o = loopObs {
             NotificationCenter.default.removeObserver(o)
-            loopObserver = nil
+            loopObs = nil
         }
         player.replaceCurrentItem(with: nil)
         vid = nil
-        isReady = false
+        ready = false
     }
 
     deinit {
-        readyObserver?.invalidate()
-        if let o = loopObserver {
-            NotificationCenter.default.removeObserver(o)
-        }
+        statusObs?.invalidate()
+        if let o = loopObs { NotificationCenter.default.removeObserver(o) }
     }
 }
 
@@ -101,52 +99,36 @@ final class PlayerPool: ObservableObject {
 
     /// vid → 槽位下标
     private var slotOf: [String: Int] = [:]
-    /// 当前展示中的槽位
-    private(set) var active: Int = 0
+    /// 当前窗口内要保留的 vid
+    private var kept: Set<String> = []
+
+    /// 任意槽位首帧就绪时回调
+    var onReady: ((String) -> Void)?
 
     init() {
+        for s in slots {
+            s.onReady = { [weak self] vid in
+                self?.onReady?(vid)
+            }
+        }
+        // 静音开关拨到静音也要出声
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 
-    /// 把三个 layer 挂到一个容器 view（只在初始化时调用一次）
-    func attach(to container: UIView) {
-        for (i, s) in slots.enumerated() {
-            s.layer.frame = container.bounds
-            s.layer.zPosition = CGFloat(i)
-            container.layer.addSublayer(s.layer)
-        }
-        showActive()
-    }
+    // MARK: - 槽位分配
 
-    /// 容器尺寸变化时手动同步（CALayer 不会自动跟随 UIView）
-    func syncLayerFrames(_ bounds: CGRect) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        for s in slots {
-            s.layer.frame = bounds
-        }
-        CATransaction.commit()
-    }
-
-    private func showActive() {
-        for (i, s) in slots.enumerated() {
-            s.layer.isHidden = (i != active)
-        }
-    }
-
-    /// 找/分配一个槽位给 vid
-    private func slot(for item: FeedItem) -> Int {
+    private func assign(_ item: FeedItem) -> Int {
         if let i = slotOf[item.vid] { return i }
-        // 优先空槽
+        // 空槽优先
         if let free = (0..<slots.count).first(where: { slots[$0].vid == nil }) {
             slots[free].prepare(item)
             slotOf[item.vid] = free
             return free
         }
-        // 否则抢一个不在保留集合里的
-        if let victim = (0..<slots.count).first(where: {
-            guard let v = slots[$0].vid else { return true }
+        // 抢一个不在保留集合里的
+        if let victim = (0..<slots.count).first(where: { s in
+            guard let v = slots[s].vid else { return true }
             return !kept.contains(v)
         }) {
             if let old = slots[victim].vid { slotOf.removeValue(forKey: old) }
@@ -154,69 +136,60 @@ final class PlayerPool: ObservableObject {
             slotOf[item.vid] = victim
             return victim
         }
-        // 实在没有就复用非 active
-        let v = (active + 1) % slots.count
-        if let old = slots[v].vid { slotOf.removeValue(forKey: old) }
-        slots[v].prepare(item)
-        slotOf[item.vid] = v
-        return v
+        // 兜底：复用 0 号
+        if let old = slots[0].vid { slotOf.removeValue(forKey: old) }
+        slots[0].prepare(item)
+        slotOf[item.vid] = 0
+        return 0
     }
 
-    private var kept: Set<String> = []
+    /// 取某条视频的播放器（必要时准备）
+    func player(for item: FeedItem) -> AVPlayer {
+        slots[assign(item)].player
+    }
 
-    /// 主入口：切换到某一条
+    func isReady(_ vid: String) -> Bool {
+        guard let i = slotOf[vid] else { return false }
+        return slots[i].ready
+    }
+
+    // MARK: - 主入口
+
     func focus(on items: [FeedItem], index: Int) {
-        guard index >= 0 && index < items.count else { return }
-        let cur = items[index]
+        guard !items.isEmpty, index >= 0, index < items.count else { return }
+        let lo = max(0, index - 1)
+        let hi = min(items.count - 1, index + 1)
+        kept = Set(items[lo...hi].map { $0.vid })
 
-        // 1) 保留集合
-        kept = Set(([index - 1, index, index + 1])
-            .filter { $0 >= 0 && $0 < items.count }
-            .map { items[$0].vid })
+        // 确保窗口内都有播放器
+        for i in lo...hi { _ = assign(items[i]) }
 
-        // 2) 预载相邻（先做，让手指还没松开时就绪）
-        for off in [1, -1] {
-            let i = index + off
-            guard i >= 0 && i < items.count else { continue }
-            let nb = items[i]
-            if slotOf[nb.vid] == nil {
-                let s = slot(for: nb)
-                if off == 1 { slots[s].preloadFrame() }
-            }
-        }
-
-        // 3) 激活当前
-        let target = slot(for: cur)
-        if target != active {
-            // 新槽位没就绪时，不切（保持上一帧冻结画面，避免黑）
-            active = target
-        }
-        slots[active].layer.zPosition = 100
-        showActive()
-        slots[active].play()
-
-        // 4) 暂停其它
-        for (i, s) in slots.enumerated() where i != active {
+        // 当前条播放，其它暂停
+        let curVid = items[index].vid
+        let cur = slots[assign(items[index])]
+        cur.play()
+        for s in slots where s.vid != nil && s.vid != curVid {
             s.pause()
         }
 
-        // 5) 释放窗口外
+        // 预载下一条的第一帧（拖动时能看到画面）
+        if index + 1 < items.count {
+            let n = assign(items[index + 1])
+            slots[n].preloadFrame()
+        }
+
+        // 释放窗口外
         for (vid, i) in slotOf where !kept.contains(vid) {
             slots[i].clear()
             slotOf.removeValue(forKey: vid)
         }
     }
 
-    func pause() { slots[active].pause() }
-    func resume() { slots[active].play() }
+    func pause() { for s in slots { s.pause() } }
 
-    func pauseAll() {
-        for s in slots { s.pause() }
+    func resume(_ vid: String) {
+        if let i = slotOf[vid] { slots[i].play() }
     }
 
-    func setMuted(_ m: Bool) {
-        for s in slots { s.player.isMuted = m }
-    }
-
-    var isMuted: Bool { slots[active].player.isMuted }
+    func pauseAll() { for s in slots { s.pause() } }
 }
