@@ -15,6 +15,7 @@ struct SearchView: View {
     @State private var loading = false
     @State private var author: Author?
     @State private var playing: PlayerTarget?
+    @State private var playItems: [FeedItem] = []
     @State private var errorText: String?
     @FocusState private var focused: Bool
 
@@ -58,7 +59,7 @@ struct SearchView: View {
             AuthorView(authorId: a.authorId)
         }
         .fullScreenCover(item: $playing) { t in
-            AuthorPlayerView(authorId: t.authorId, startVid: t.vid, authorName: t.author)
+            PlayerTargetView(targets: playItems, startVid: t.vid, authorName: t.author)
         }
     }
 
@@ -142,9 +143,7 @@ struct SearchView: View {
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(r.videos) { g in
                         Button {
-                            playing = PlayerTarget(authorId: g.authorId ?? "",
-                                                   vid: g.vid,
-                                                   author: g.author ?? "未知作者")
+                            openVideo(g)
                         } label: {
                             GeometryReader { geo in
                                 ZStack {
@@ -205,6 +204,21 @@ struct SearchView: View {
     }
 
     // MARK: - 请求
+
+    /// 点搜索结果里的视频 → 拉完整信息后播放
+    private func openVideo(_ g: VideoThumb) {
+        Task {
+            if let r = try? await APIClient.shared.videos(byIDs: [g.vid]),
+               let item = r.items.first {
+                await MainActor.run {
+                    playItems = r.items
+                    playing = PlayerTarget(authorId: item.authorId,
+                                           vid: item.vid,
+                                           author: item.author)
+                }
+            }
+        }
+    }
 
     private func runSearch() {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
