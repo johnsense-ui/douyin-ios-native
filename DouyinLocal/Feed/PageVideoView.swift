@@ -1,4 +1,4 @@
-//
+﻿//
 //  PageVideoView.swift
 //  DouyinLocal
 //
@@ -143,7 +143,7 @@ final class PageVideoView: UIView {
     private weak var obsPlayer: AVPlayer?
     private var timeObs: Any?
 
-    private(set) var pageIndex: Int = -1
+    var pageIndex: Int = -1
     private(set) var vid: String = ""
     private var item: FeedItem?
     private(set) var isActivePage = false
