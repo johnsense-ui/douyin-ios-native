@@ -1,4 +1,4 @@
-﻿//
+//
 //  Models.swift
 //  DouyinLocal
 //
@@ -137,4 +137,15 @@ struct StatePayload: Decodable {
     let ok: Bool
     let liked: [String: Int]
     let saved: [String: Int]
+    let following: [String: Int]?
+
+    var likedIDs: [String] { Array(liked.keys) }
+    var savedIDs: [String] { Array(saved.keys) }
+    var followingIDs: [String] { Array((following ?? [:]).keys) }
+}
+
+/// 按 vid 批量取视频的返回（「我的」页面用）
+struct FeedItemsPage: Decodable {
+    let ok: Bool
+    let items: [FeedItem]
 }
