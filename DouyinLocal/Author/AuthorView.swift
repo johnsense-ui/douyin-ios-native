@@ -1,4 +1,4 @@
-//
+﻿//
 //  AuthorView.swift
 //  DouyinLocal
 //
@@ -13,11 +13,11 @@ struct AuthorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var author: Author?
-    @State private var items: [GridItem] = []
+    @State private var items: [VideoThumb] = []
     @State private var total = 0
     @State private var loading = true
     @State private var offset = 0
-    @State private var playing: GridItem?
+    @State private var playing: VideoThumb?
 
     private let limit = 30
     private let columns = [
@@ -183,7 +183,7 @@ struct AuthorView: View {
         }
     }
 
-    private func openPlayer(_ g: GridItem) {
+    private func openPlayer(_ g: VideoThumb) {
         playing = g
     }
 
