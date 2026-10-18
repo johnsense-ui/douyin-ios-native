@@ -12,30 +12,35 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: 显示环境
+      - name: 环境
         run: |
           xcodebuild -version
-          xcodebuild -showsdks | grep -i iphone || true
+          sw_vers
 
-      - name: 校验工程结构
+      - name: 工程诊断
         run: |
           cd swift
-          ls -la
-          echo "--- sources ---"
-          find DouyinLocal -name "*.swift" | sort
-          echo "--- list ---"
-          xcodebuild -list -project DouyinLocal.xcodeproj
+          echo "=== tree ==="
+          find . -type f | sort | head -60
+          echo
+          echo "=== xcodebuild -list (stdout+stderr) ==="
+          xcodebuild -list -project DouyinLocal.xcodeproj || true
+          echo
+          echo "=== plutil 校验 pbxproj ==="
+          plutil -lint DouyinLocal.xcodeproj/project.pbxproj || true
+          echo
+          echo "=== 前 5 行 ==="
+          head -5 DouyinLocal.xcodeproj/project.pbxproj | cat -A | head -5
 
       - name: 编译（不签名）
         run: |
-          set -o pipefail
           cd swift
-          mkdir -p build
+          set +e
           xcodebuild build \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
@@ -47,31 +52,35 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGN_ENTITLEMENTS="" \
             DEVELOPMENT_TEAM="" \
-            2>&1 | tee build.log | tail -80
+            > build.log 2>&1
+          rc=$?
+          echo "exit=$rc"
+          echo "===== tail 120 ====="
+          tail -120 build.log
+          exit $rc
 
       - name: 打包 unsigned IPA
+        if: success()
         run: |
           set -e
           cd swift
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "APP=$APP"
-          if [ -z "$APP" ]; then echo "找不到 .app"; exit 1; fi
           rm -rf out && mkdir -p out/Payload
           cp -R "$APP" out/Payload/
-          cd out
-          zip -qry ../DouyinLocal-unsigned.ipa Payload
+          cd out && zip -qry ../DouyinLocal-unsigned.ipa Payload
           ls -lh ../DouyinLocal-unsigned.ipa
 
       - name: 上传 IPA
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
           path: swift/DouyinLocal-unsigned.ipa
           retention-days: 30
 
-      - name: 上传编译日志（总是）
+      - name: 上传日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
