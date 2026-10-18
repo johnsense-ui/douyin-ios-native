@@ -97,6 +97,22 @@ final class APIClient {
         try await get("api2/suggest", [:])
     }
 
+    /// 让服务端重新扫描磁盘，把新视频并入索引
+    func rescan() async throws -> RescanResult {
+        var req = URLRequest(url: Self.baseURL.appendingPathComponent("api2/rescan"))
+        req.httpMethod = "POST"
+        req.timeoutInterval = 180
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError.http((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+        return try decoder.decode(RescanResult.self, from: data)
+    }
+
+    func stats() async throws -> ServerStats {
+        try await get("api2/stats", [:])
+    }
+
     // MARK: - 状态
 
     func pushState(liked: [String: Bool] = [:],
