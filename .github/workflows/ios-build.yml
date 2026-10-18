@@ -50,20 +50,26 @@ jobs:
       - name: 提取错误
         if: always()
         run: |
-          if [ -f build.log ]; then
-            echo "===== 日志行数 ====="
-            wc -l build.log
-            echo "===== BUILD SUCCEEDED 计数 ====="
-            grep -c "BUILD SUCCEEDED" build.log || true
-            echo "===== error: 行 ====="
-            grep -n "error:" build.log | head -50 || echo "(无 error: 行)"
-            echo "===== 失败命令 ====="
-            grep -n -A8 "The following build commands failed" build.log | head -40 || true
-            echo "===== 尾部 60 行 ====="
-            tail -60 build.log
-          else
-            echo "build.log 不存在"
-          fi
+          {
+            echo "## 编译诊断"
+            echo '```'
+            echo "=== build/ 结构 ==="
+            ls -la build 2>&1 || echo "build/ 不存在"
+            ls -la build/Build/Products 2>&1 || echo "Products 不存在"
+            echo
+            echo "=== 日志行数 ==="
+            wc -l build.log 2>&1 || echo "build.log 不存在"
+            echo
+            echo "=== BUILD 结果 ==="
+            grep -E "BUILD (SUCCEEDED|FAILED)" build.log 2>&1 | tail -3 || echo "无 BUILD 行"
+            echo
+            echo "=== error: 行 ==="
+            grep -n "error:" build.log 2>&1 | head -40 || echo "(无)"
+            echo
+            echo "=== 尾部 40 行 ==="
+            tail -40 build.log 2>&1
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 上传编译日志
         if: always()
