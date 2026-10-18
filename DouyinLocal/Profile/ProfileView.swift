@@ -26,8 +26,7 @@ struct ProfileView: View {
     @State private var followingAuthors: [Author] = []
 
     @State private var route: ProfileRoute?
-    /// 点击时锁定的播放列表（避免 tab 变化后播错列表）
-    @State private var playList: [FeedItem] = []
+
 
     private let columns = [
         GridItem(.flexible(), spacing: 2),
@@ -60,8 +59,8 @@ struct ProfileView: View {
         .onChange(of: state.followingCount) { _, _ in Task { await loadFollowing() } }
         .fullScreenCover(item: $route) { r in
             switch r {
-            case .play(let item):
-                PlayerTargetView(targets: playList,
+            case .play(let list, let item):
+                PlayerTargetView(targets: list,
                                  startVid: item.vid,
                                  authorName: item.author)
             case .author(let t):
@@ -224,9 +223,8 @@ struct ProfileView: View {
                 LazyVGrid(columns: columns, spacing: 2) {
                     ForEach(list) { item in
                         Button {
-                            // 关键：先锁定列表，再打开播放页
-                            playList = list
-                            route = .play(item)
+                            // 列表随路由一起带走，避免拿不到或拿错
+                            route = .play(list, item)
                         } label: {
                             GeometryReader { geo in
                                 ZStack {
@@ -312,12 +310,12 @@ struct ProfileView: View {
 
 // MARK: - 二级页路由
 enum ProfileRoute: Identifiable {
-    case play(FeedItem)
+    case play([FeedItem], FeedItem)
     case author(AuthorTarget)
 
     var id: String {
         switch self {
-        case .play(let i): return "play-\(i.vid)"
+        case .play(_, let i): return "play-\(i.vid)"
         case .author(let a): return "author-\(a.id)"
         }
     }
