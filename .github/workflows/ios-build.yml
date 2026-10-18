@@ -4,11 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      note:
-        description: "构建说明"
-        required: false
-        default: ""
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -21,49 +20,62 @@ jobs:
       - name: 显示环境
         run: |
           xcodebuild -version
-          xcodebuild -showsdks | head -20
+          xcodebuild -showsdks | grep -i iphone || true
+
+      - name: 校验工程结构
+        run: |
+          cd swift
+          ls -la
+          echo "--- sources ---"
+          find DouyinLocal -name "*.swift" | sort
+          echo "--- list ---"
+          xcodebuild -list -project DouyinLocal.xcodeproj
 
       - name: 编译（不签名）
         run: |
           set -o pipefail
           cd swift
-          xcodebuild \
+          mkdir -p build
+          xcodebuild build \
             -project DouyinLocal.xcodeproj \
             -scheme DouyinLocal \
             -configuration Release \
             -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath build/DouyinLocal.xcarchive \
+            -derivedDataPath build \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            archive | tee build.log | tail -60
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee build.log | tail -80
 
       - name: 打包 unsigned IPA
         run: |
           set -e
           cd swift
-          APP=$(find build/DouyinLocal.xcarchive/Products/Applications -maxdepth 1 -name "*.app")
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -1)
           echo "APP=$APP"
-          mkdir -p out/Payload
+          if [ -z "$APP" ]; then echo "找不到 .app"; exit 1; fi
+          rm -rf out && mkdir -p out/Payload
           cp -R "$APP" out/Payload/
           cd out
           zip -qry ../DouyinLocal-unsigned.ipa Payload
           ls -lh ../DouyinLocal-unsigned.ipa
 
-      - name: 上传产物
+      - name: 上传 IPA
         uses: actions/upload-artifact@v4
         with:
           name: DouyinLocal-ipa
           path: swift/DouyinLocal-unsigned.ipa
           retention-days: 30
 
-      - name: 编译日志（失败时）
-        if: failure()
+      - name: 上传编译日志（总是）
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: swift/build.log
-          retention-days: 7
+          retention-days: 14
+          if-no-files-found: warn
