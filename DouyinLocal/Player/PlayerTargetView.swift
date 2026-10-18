@@ -1,4 +1,4 @@
-//
+﻿//
 //  PlayerTargetView.swift
 //  DouyinLocal
 //
@@ -146,7 +146,7 @@ struct PlayerTargetView: View {
             pool.focus(on: items, index: new)
             paused = false
         }
-        .sheet(isPresented: $showAuthor) {
+        .fullScreenCover(isPresented: $showAuthor) {
             if index < items.count {
                 AuthorView(authorId: items[index].authorId)
             }
