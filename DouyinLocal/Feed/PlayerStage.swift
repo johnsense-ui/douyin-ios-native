@@ -104,6 +104,7 @@ final class StageView: UIView, UIScrollViewDelegate {
         super.layoutSubviews()
         videoHost.frame = bounds
         scrollView.frame = bounds
+        pool?.syncLayerFrames(videoHost.bounds)
         let h = bounds.height * CGFloat(max(itemsCount, 1))
         scrollView.contentSize = CGSize(width: bounds.width, height: h)
     }
