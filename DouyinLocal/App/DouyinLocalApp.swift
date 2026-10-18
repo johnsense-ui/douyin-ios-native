@@ -20,10 +20,18 @@ struct RootView: View {
     @AppStorage("hasServer") private var hasServer = false
 
     var body: some View {
-        if hasServer {
-            FeedView()
-        } else {
-            ServerSetupView()
+        Group {
+            if hasServer {
+                FeedView()
+            } else {
+                ServerSetupView()
+            }
+        }
+        .task {
+            // 启动时从服务端恢复点赞/收藏/关注（重装或换手机不丢）
+            if hasServer {
+                await StateStore.shared.pullFromServer()
+            }
         }
     }
 }
