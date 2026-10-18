@@ -27,7 +27,7 @@ struct FeedView: View {
     @State private var index = 0
     @State private var muted = true
     @State private var paused = false
-    @State private var showAuthor: String?
+    @State private var showAuthor: AuthorTarget?
     @State private var showSearch = false
     @State private var showProfile = false
 
@@ -60,14 +60,14 @@ struct FeedView: View {
             // 底部文案（左下）
             if index < store.items.count {
                 FeedCaption(item: store.items[index],
-                            onAuthor: { showAuthor = store.items[index].authorId })
+                            onAuthor: { showAuthor = AuthorTarget(id: store.items[index].authorId) })
             }
 
             // 右侧操作栏
             if index < store.items.count {
                 FeedActionRail(item: store.items[index],
                                muted: muted,
-                               onAuthor: { showAuthor = store.items[index].authorId },
+                               onAuthor: { showAuthor = AuthorTarget(id: store.items[index].authorId) },
                                onLike: { state.toggleLike(store.items[index].vid) },
                                onSave: { state.toggleSave(store.items[index].vid) },
                                onMute: {
@@ -126,8 +126,8 @@ struct FeedView: View {
             store.ensureMore(currentIndex: new)
             paused = false
         }
-        .sheet(item: $showAuthor) { aid in
-            AuthorView(authorId: aid)
+        .sheet(item: $showAuthor) { t in
+            AuthorView(authorId: t.id)
         }
         .sheet(isPresented: $showSearch) { SearchView() }
         .sheet(isPresented: $showProfile) { ProfileView() }
