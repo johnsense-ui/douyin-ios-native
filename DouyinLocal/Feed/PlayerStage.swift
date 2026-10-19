@@ -171,6 +171,8 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         switch g.state {
         case .began:
             adjustingRate = true
+            // 锁定：倍速期间禁止上下滑动切页
+            scrollView.isScrollEnabled = false
             pool?.setRate(2.0, vid: vid)
             // 清屏：隐藏右栏/文案/进度条，底部显示倍速提示
             for p in pages where p.pageIndex == settledPage {
@@ -178,6 +180,8 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             }
             onSpeedMode?(true)
         case .ended, .cancelled, .failed:
+            // 松手恢复滑动
+            scrollView.isScrollEnabled = true
             if adjustingRate {
                 adjustingRate = false
                 pool?.setRate(1.0, vid: vid)
@@ -456,6 +460,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
 
     private func settle(_ sv: UIScrollView) {
         guard bounds.height > 0, itemsCount > 0 else { return }
+        // 兜底解锁：万一长按 cancelled 没触发，这里恢复滑动
+        if !sv.isScrollEnabled && !adjustingRate {
+            sv.isScrollEnabled = true
+        }
         let page = max(0, min(Int((sv.contentOffset.y / bounds.height).rounded()),
                              itemsCount - 1))
         centerPage = page
