@@ -29,7 +29,9 @@ struct PlayerStage: UIViewRepresentable {
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
         bind(v)
-        v.configure(items: items)
+        // 关键：用 SwiftUI 传进来的 index 作为起始页，
+        // 否则从搜索结果点第 N 条会从第 0 条开始播
+        v.configure(items: items, startAt: index)
         return v
     }
 
@@ -195,10 +197,14 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         syncPages()
     }
 
-    func configure(items: [FeedItem]) {
+    func configure(items: [FeedItem], startAt page: Int? = nil) {
         self.items = items
         itemsCount = items.count
-        settledPage = min(settledPage, max(itemsCount - 1, 0))
+        if let page {
+            settledPage = max(0, min(page, max(itemsCount - 1, 0)))
+        } else {
+            settledPage = min(settledPage, max(itemsCount - 1, 0))
+        }
         centerPage = settledPage
 
         for p in pages {
@@ -213,7 +219,18 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         pool?.keep(items, around: settledPage)
         syncPages()
         pool?.focus(on: items, index: settledPage)
+        // 绑定会把 isActivePage 重置为 false，这里必须显式激活，
+        // 否则静图永不撤 → 黑屏但有声音
+        activate(page: settledPage)
         prefetchAhead(from: settledPage)
+    }
+
+    /// 激活某一页，其余页取消激活
+    func activate(page: Int) {
+        for p in pages where p.pageIndex >= 0 {
+            p.setActive(p.pageIndex == page)
+            if p.pageIndex == page { p.refreshState() }
+        }
     }
 
     /// 预取窗口：前 1 条 + 后 5 条
@@ -382,13 +399,8 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             onIndexChange?(page)
         }
 
-        // 落位后必须激活当前页：拖动时 bind 会把 isActivePage 重置为 false，
-        // 不在这里设回来，静图就永远撤不掉（表现为画面停在第一帧、声音和进度却在走）。
-        // setActive 内部已做幂等，不会重复 play。
-        for p in pages where p.pageIndex >= 0 {
-            p.setActive(p.pageIndex == page)
-            if p.pageIndex == page { p.refreshState() }
-        }
+        // 落位后必须激活当前页（同 configure 的原因），setActive 内部已幂等
+        activate(page: page)
         prefetchAhead(from: page)
     }
 
