@@ -39,6 +39,7 @@ struct FeedView: View {
     @State private var route: FeedRoute?
     /// 左滑进主页（用滑动转场，不用 fullScreenCover）
     @State private var slideAuthor: String?
+    @State private var speedMode = false      // 倍速清屏
 
     var body: some View {
         ZStack {
@@ -83,6 +84,8 @@ struct FeedView: View {
                 .padding(.top, -8)
                 Spacer()
             }
+            .opacity(speedMode ? 0 : 1)
+            .animation(.easeOut(duration: 0.18), value: speedMode)
 
             // 底部 tab（固定）
             VStack {
@@ -91,8 +94,10 @@ struct FeedView: View {
                     tabItem("推荐", selected: true) {}
                     tabItem("我的", selected: false) { route = .profile }
                 }
-                .padding(.bottom, 8)
+                .padding(.bottom, 0)      // 整体下移，贴近 Home 指示条上方
             }
+            .opacity(speedMode ? 0 : 1)
+            .animation(.easeOut(duration: 0.18), value: speedMode)
 
             // 左滑进作者主页
             if let aid = slideAuthor {
@@ -171,7 +176,8 @@ struct FeedView: View {
                     onLike: { state.toggleLike($0) },
                     onSave: { state.toggleSave($0) },
                     onAuthor: { route = .author($0) },
-                    onSwipeLeft: handleSwipeLeft)
+                    onSwipeLeft: handleSwipeLeft,
+                    onSpeedMode: { on in speedMode = on })
     }
 
     private func handleTap() {
