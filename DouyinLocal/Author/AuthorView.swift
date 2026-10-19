@@ -63,9 +63,9 @@ struct AuthorView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { closeSelf() } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
+                        Image("icon_titlebar_whiteback")
+                            .resizable().scaledToFit()
+                            .frame(width: 20, height: 20)
                             .frame(width: 52, height: 52)
                             .contentShape(Rectangle())
                     }
@@ -97,78 +97,111 @@ struct AuthorView: View {
         }
     }
 
-    // MARK: - 头部
+    // MARK: - 头部（参数取自官方 UserInfoHeader）
 
     private var header: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 14) {
-                UserAvatar(name: author?.displayName ?? "?", size: 76)
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(author?.displayName ?? "未知作者")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    HStack(spacing: 16) {
-                        stat("关注", 0)
-                        stat("粉丝", author?.followerCount ?? 0)
-                        stat("作品", total)
+        VStack(alignment: .leading, spacing: 0) {
+            // 头像 90pt + 右侧操作按钮
+            HStack(alignment: .center, spacing: 0) {
+                UserAvatar(name: author?.displayName ?? "?", size: 90)
+
+                Spacer(minLength: 8)
+
+                // 关注按钮：80x40 圆角2 官方红
+                if state.isFollowing(authorId) {
+                    Button { state.toggleFollow(authorId) } label: {
+                        Text("已关注")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Theme.textTertiary)
+                            .frame(width: 80, height: 40)
+                            .background(RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.white.opacity(0.2)))
                     }
+                    .buttonStyle(.plain)
+                } else {
+                    Button { state.toggleFollow(authorId) } label: {
+                        HStack(spacing: 2) {
+                            Image("icon_personal_add_little")
+                                .resizable().scaledToFit()
+                                .frame(width: 12, height: 12)
+                            Text("关注")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(width: 80, height: 40)
+                        .background(RoundedRectangle(cornerRadius: 2)
+                            .fill(Theme.primary))
+                    }
+                    .buttonStyle(.plain)
                 }
-                Spacer(minLength: 0)
-            }
 
-            if let sig = author?.signature, !sig.isEmpty {
-                Text(sig)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            HStack(spacing: 8) {
-                Button {
-                    state.toggleFollow(authorId)
-                } label: {
-                    Text(state.isFollowing(authorId) ? "已关注" : "关注")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(state.isFollowing(authorId) ? .white.opacity(0.85) : .white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(
-                            Group {
-                                if state.isFollowing(authorId) {
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .stroke(.white.opacity(0.3))
-                                } else {
-                                    RoundedRectangle(cornerRadius: 5)
-                                        .fill(Theme.primary)
-                                }
-                            }
-                        )
+                // 更多按钮：40x40 白0.2
+                Button { } label: {
+                    Image("icon_titlebar_whitemore")
+                        .resizable().scaledToFit()
+                        .frame(width: 20, height: 20)
+                        .frame(width: 40, height: 40)
+                        .background(RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.white.opacity(0.2)))
                 }
                 .buttonStyle(.plain)
-                Button {} label: {
-                    Text("私信")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.35)))
-                }
+                .padding(.leading, 5)
             }
-            .buttonStyle(.plain)
+            .padding(.top, 8)
 
-            // 排序：点赞优先 / 时间优先
-            HStack(spacing: 18) {
+            // 昵称 26pt Bold，距头像下 20
+            Text(author?.displayName ?? "未知作者")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.top, 20)
+
+            // 抖音号 + 箭头（官方：距昵称下 3）
+            HStack(spacing: 4) {
+                Text("抖音号：\(authorId)")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textTertiary)
+                Image("icon_arrow")
+                    .resizable().scaledToFit()
+                    .frame(width: 8, height: 8)
+            }
+            .padding(.top, 3)
+
+            // 分割线（官方：距抖音号下 10）
+            Divider()
+                .background(Color.white.opacity(0.2))
+                .padding(.top, 10)
+
+            // 简介（官方：距分割线下 10）
+            if let sig = author?.signature, !sig.isEmpty {
+                Text(sig)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(2)
+                    .padding(.top, 10)
+            }
+
+            // 统计：16pt Bold，间距 30（官方：距上方 15）
+            HStack(spacing: 30) {
+                stat("获赞", 0)
+                stat("关注", 0)
+                stat("粉丝", author?.followerCount ?? 0)
+            }
+            .padding(.top, 15)
+
+            // 排序 tab（官方 SlideTabBarFooter：14pt，选中白/未选白0.6）
+            HStack(spacing: 22) {
                 sortTab(0, "点赞优先")
                 sortTab(1, "时间优先")
                 Spacer()
+                Text("\(total) 个作品")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textTertiary)
             }
-            .padding(.top, 2)
+            .padding(.top, 14)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 15)
+        .padding(.bottom, 10)
         .background(Color.black)
         .overlay(alignment: .bottom) {
             Divider().background(Color.white.opacity(0.12))
@@ -178,7 +211,7 @@ struct AuthorView: View {
     private func stat(_ title: String, _ n: Int) -> some View {
         HStack(spacing: 3) {
             Text(FeedItem.formatCount(n))
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
             Text(title)
                 .font(.system(size: 12.5))
@@ -199,10 +232,11 @@ struct AuthorView: View {
                     .foregroundStyle(sort == i ? .white : Theme.textTertiary)
                 Capsule()
                     .fill(sort == i ? Color.white : .clear)
-                    .frame(width: 16, height: 2)
+                    .frame(width: 18, height: 2.5)
             }
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     // MARK: - 九宫格
@@ -214,7 +248,7 @@ struct AuthorView: View {
                     openPlayer(g)
                 } label: {
                     GeometryReader { geo in
-                        ZStack {
+                        ZStack(alignment: .bottomLeading) {
                             if let u = g.coverURL {
                                 CachedAsyncImage(url: u)
                                     .scaledToFill()
@@ -223,21 +257,29 @@ struct AuthorView: View {
                             } else {
                                 Color(white: 0.12)
                             }
-                            // 播放量
-                            VStack {
-                                Spacer()
-                                HStack(spacing: 3) {
-                                    Image(systemName: "play.fill")
-                                        .font(.system(size: 9))
-                                    Text(FeedItem.formatCount(g.digg))
-                                        .font(.system(size: 11, weight: .medium))
-                                }
-                                .foregroundStyle(.white)
-                                .shadow(color: .black.opacity(0.6), radius: 2)
-                                .padding(.leading, 5)
-                                .padding(.bottom, 5)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            // 官方：底部 100pt 渐变（透明 → 黑0.2 → 黑0.6）
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black.opacity(0.2), location: 0.5),
+                                    .init(color: .black.opacity(0.6), location: 1)
+                                ],
+                                startPoint: .top, endPoint: .bottom)
+                            .frame(height: 100)
+                            .frame(maxHeight: .infinity, alignment: .bottom)
+
+                            // 官方：点赞数 12pt + icon_home_likenum，距左10 距底20
+                            HStack(spacing: 2) {
+                                Image("icon_home_likenum")
+                                    .resizable().scaledToFit()
+                                    .frame(width: 11, height: 11)
+                                Text(FeedItem.formatCount(g.digg))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white)
                             }
+                            .padding(.leading, 10)
+                            .padding(.bottom, 6)
                         }
                     }
                     .aspectRatio(3.0 / 4.0, contentMode: .fit)
