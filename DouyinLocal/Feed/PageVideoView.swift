@@ -397,7 +397,13 @@ final class PageVideoView: UIView {
         if active {
             if !playingStarted {
                 p.play()
-                // playingStarted 由 tick 在真的有画面后置 true
+                // 兜底：若 350ms 内 tick 没触发（比如 item 切换时时间观察者漏了一次），
+                // 也强制揭图，避免「画面停在第一帧、声音在走」
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                    guard let self, self.isActivePage, !self.playingStarted else { return }
+                    self.playingStarted = true
+                    self.updateStills()
+                }
             }
         } else {
             p.pause()
