@@ -19,6 +19,8 @@ struct PlayerStage: UIViewRepresentable {
     let pool: PlayerPool
     @Binding var index: Int
     let paused: Bool
+    /// 首次创建时的起始页（不依赖 @State 是否已生效）
+    var startAt: Int? = nil
     var onTap: () -> Void = {}
     var onDoubleTap: (CGPoint) -> Void = { _ in }
     var onLike: (String) -> Void = { _ in }
@@ -29,9 +31,9 @@ struct PlayerStage: UIViewRepresentable {
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
         bind(v)
-        // 关键：用 SwiftUI 传进来的 index 作为起始页，
-        // 否则从搜索结果点第 N 条会从第 0 条开始播
-        v.configure(items: items, startAt: index)
+        // 起始页优先用显式传入的 startAt，其次才用 index
+        // （@State 在 init 里赋值后可能还没同步到首帧，不能只依赖它）
+        v.configure(items: items, startAt: startAt ?? index)
         return v
     }
 
@@ -39,7 +41,7 @@ struct PlayerStage: UIViewRepresentable {
         bind(v)
         v.applyPaused(paused)
         if v.itemsCount != items.count {
-            v.configure(items: items)
+            v.configure(items: items, startAt: startAt ?? index)
         } else if v.settledPage != index {
             v.jumpTo(index)
         }
@@ -283,6 +285,9 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
                                     animated: false)
         pool?.keep(items, around: i)
         syncPages()
+        // 跳页后同样需要播放 + 激活，否则静图不撤（黑屏但有声音）
+        if !pausedNow { pool?.focus(on: items, index: i) }
+        activate(page: i)
     }
 
     func applyPaused(_ p: Bool) {
