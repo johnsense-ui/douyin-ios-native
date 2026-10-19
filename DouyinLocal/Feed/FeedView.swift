@@ -1,4 +1,4 @@
-﻿//
+//
 //  FeedView.swift
 //  DouyinLocal
 //
@@ -64,8 +64,6 @@ struct FeedView: View {
                             .font(.system(size: 20, weight: .medium))
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.5), radius: 4)
-                            .frame(width: 44, height: 44)   // 触摸区放大到 44pt
-                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     Spacer()
@@ -74,13 +72,11 @@ struct FeedView: View {
                             .font(.system(size: 22, weight: .medium))
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.5), radius: 4)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 7)
-                .padding(.top, -6)   // 抵消 44pt 触摸区带来的视觉下移
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
                 Spacer()
             }
 
@@ -216,11 +212,9 @@ struct FeedView: View {
                     .foregroundStyle(selected ? .white : .white.opacity(0.62))
                 Capsule()
                     .fill(selected ? Color.white : .clear)
-                    .frame(width: 22, height: 2.5)
+                    .frame(width: 18, height: 2)
             }
             .shadow(color: .black.opacity(0.45), radius: 3)
-            .frame(minWidth: 76, minHeight: 48)   // 整块可点，不用点准文字
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -242,7 +236,11 @@ struct UserAvatar: View {
             .font(.system(size: size * 0.42, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
-            .background(Theme.avatarGradient(name))
+            .background(
+                LinearGradient(colors: [Theme.primary.opacity(0.92),
+                                        Color(red: 0.36, green: 0.22, blue: 0.62)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
             .clipShape(Circle())
             .overlay(Circle().stroke(.white.opacity(0.92), lineWidth: 1.3))
             .shadow(color: .black.opacity(0.28), radius: 2)
