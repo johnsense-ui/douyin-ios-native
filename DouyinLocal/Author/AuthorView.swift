@@ -97,7 +97,7 @@ struct AuthorView: View {
     // MARK: - 头部
 
     private var header: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             HStack(spacing: 14) {
                 UserAvatar(name: author?.displayName ?? "?", size: 76)
                 VStack(alignment: .leading, spacing: 5) {
@@ -129,8 +129,8 @@ struct AuthorView: View {
                     Text(state.isFollowing(authorId) ? "已关注" : "关注")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(state.isFollowing(authorId) ? .white.opacity(0.85) : .white)
-                        .frame(width: 104)
-                        .frame(height: 35)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
                         .background(
                             Group {
                                 if state.isFollowing(authorId) {
@@ -148,9 +148,9 @@ struct AuthorView: View {
                     Text("私信")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 104)
-                        .frame(height: 35)
-                        .background(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.28)))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 34)
+                        .background(RoundedRectangle(cornerRadius: 5).stroke(.white.opacity(0.35)))
                 }
             }
             .buttonStyle(.plain)
@@ -163,30 +163,12 @@ struct AuthorView: View {
             }
             .padding(.top, 2)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.top, 10)
         .padding(.bottom, 12)
-        .background(
-            ZStack {
-                if let u = items.first?.coverURL {
-                    CachedAsyncImage(url: u)
-                        .scaledToFill()
-                        .blur(radius: 26)
-                        .overlay(
-                            LinearGradient(
-                                colors: [Color.black.opacity(0.45),
-                                         Color.black.opacity(0.86),
-                                         Color.black],
-                                startPoint: .top, endPoint: .bottom)
-                        )
-                } else {
-                    Color.black
-                }
-            }
-        )
-        .clipped()
+        .background(Color.black)
         .overlay(alignment: .bottom) {
-            Divider().background(Color.white.opacity(0.07))
+            Divider().background(Color.white.opacity(0.12))
         }
     }
 
@@ -214,7 +196,7 @@ struct AuthorView: View {
                     .foregroundStyle(sort == i ? .white : Theme.textTertiary)
                 Capsule()
                     .fill(sort == i ? Color.white : .clear)
-                    .frame(width: 18, height: 2.5)
+                    .frame(width: 16, height: 2)
             }
         }
         .buttonStyle(.plain)
