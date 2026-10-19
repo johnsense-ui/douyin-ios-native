@@ -1,4 +1,4 @@
-//
+﻿//
 //  AuthorView.swift
 //  DouyinLocal
 //
@@ -66,7 +66,10 @@ struct AuthorView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.white)
+                            .frame(width: 52, height: 52)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .toolbarBackground(Color.black, for: .navigationBar)
