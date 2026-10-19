@@ -75,20 +75,42 @@ final class RailItem: UIView {
     private let label = UILabel()
     private let iconSize: CGFloat
 
+    /// 官方图片资源（有就用，没有则回落到 SF Symbols）
+    private let assetName: String?
+
     init(systemName: String, iconSize: CGFloat = 30) {
         self.iconSize = iconSize
+        self.assetName = nil
         super.init(frame: .zero)
-
         button.tintColor = .white
         button.setImage(UIImage(systemName: systemName,
                                 withConfiguration: UIImage.SymbolConfiguration(
                                     pointSize: iconSize, weight: .regular)), for: .normal)
-        addSubview(button)
+        commonInit()
+    }
 
+    /// 用项目内的官方图标（抖音原始素材）
+    init(asset: String, iconSize: CGFloat = 26) {
+        self.iconSize = iconSize
+        self.assetName = asset
+        super.init(frame: .zero)
+        button.adjustsImageWhenHighlighted = false
+        button.setImage(UIImage(named: asset), for: .normal)
+        commonInit()
+    }
+
+    private func commonInit() {
+        addSubview(button)
         label.textColor = .white
-        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.font = .systemFont(ofSize: 12, weight: .medium)   // 官方 SmallFont = 12
         label.textAlignment = .center
         addSubview(label)
+    }
+
+    /// 切换图标（例如点赞前/后）
+    func setAsset(_ name: String) {
+        guard assetName != nil else { return }
+        button.setImage(UIImage(named: name), for: .normal)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -127,9 +149,9 @@ final class PageVideoView: UIView {
     private let barFill = UIView()
 
     private let avatarBtn = TapRow()
-    private let avatarDot = AvatarDot(size: 46)
+    private let avatarDot = AvatarDot(size: 50)   // 官方半径 25
     private let followBadge = UIView()
-    private let heart = RailItem(systemName: "heart.fill")
+    private let heart = RailItem(asset: "icon_home_like_before", iconSize: 26)
     private let save = RailItem(systemName: "bookmark.fill")
 
     private let authorRow = TapRow()
@@ -189,13 +211,10 @@ final class PageVideoView: UIView {
 
         avatarBtn.addSubview(avatarDot)
         followBadge.backgroundColor = UIColor(Theme.primary)
-        followBadge.layer.cornerRadius = 9.5
-        let plus = UIImageView(image: UIImage(systemName: "plus",
-                                              withConfiguration: UIImage.SymbolConfiguration(
-                                                pointSize: 9, weight: .bold)))
-        plus.tintColor = .white
+        followBadge.layer.cornerRadius = 10
+        let plus = UIImageView(image: UIImage(named: "icon_personal_add_little"))
         plus.contentMode = .center
-        plus.frame = CGRect(x: 0, y: 0, width: 19, height: 19)
+        plus.frame = CGRect(x: 0, y: 0, width: 20, height: 20)
         followBadge.addSubview(plus)
         avatarBtn.addSubview(followBadge)
         avatarBtn.onTap = { [weak self] in
@@ -440,6 +459,7 @@ final class PageVideoView: UIView {
     func refreshState() {
         guard let item else { return }
         let s = StateStore.shared
+        heart.setAsset(s.isLiked(item.vid) ? "icon_home_like_after" : "icon_home_like_before")
         heart.setTint(s.isLiked(item.vid)
                       ? UIColor(red: 0xFE / 255.0, green: 0x2C / 255.0, blue: 0x55 / 255.0, alpha: 1)
                       : .white)
@@ -496,30 +516,36 @@ final class PageVideoView: UIView {
         coverView.frame = bounds
         frameView.frame = bounds
         bottomFade.frame = CGRect(x: 0, y: h - 300, width: w, height: 300)
-        barBg.frame = CGRect(x: 0, y: h - 80, width: w, height: 1.5)
-        barFill.frame = CGRect(x: 0, y: h - 80, width: barFill.frame.width, height: 1.5)
+        barBg.frame = CGRect(x: 0, y: h - 55 - safeAreaInsets.bottom, width: w, height: 1.5)
+        barFill.frame = CGRect(x: 0, y: h - 55 - safeAreaInsets.bottom, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
 
-        let railW: CGFloat = 64
-        let items: [UIView] = [avatarBtn, heart, save]
-        let heights: [CGFloat] = [46 + 8,
-                                  heart.intrinsicContentSize.height,
-                                  save.intrinsicContentSize.height]
-        let spacing: CGFloat = 14
-        let total = heights.reduce(0, +) + spacing * CGFloat(items.count - 1)
-        var y = h - 96 - total
-        for (i, v) in items.enumerated() {
-            v.frame = CGRect(x: w - railW - 4, y: y, width: railW, height: heights[i])
-            y += heights[i] + spacing
-        }
-        let avatarX = (railW - 46) / 2
-        avatarDot.frame = CGRect(x: avatarX, y: 0, width: 46, height: 46)
-        followBadge.frame = CGRect(x: avatarX + (46 - 19) / 2, y: 46 - 12, width: 19, height: 19)
+        // ===== 右栏：抖音官方 AwemeListCell 参数 =====
+        // right inset 10 / 图标区 50x45 / 间距 25 / 头像 50 / 头像与收藏间距 35
+        let railW: CGFloat = 50
+        let iconH: CGFloat = 45
+        let gap: CGFloat = 25
+        let safeBottom = safeAreaInsets.bottom
 
-        let textW = w - 96 - 14
-        authorDot.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
-        authorName.frame = CGRect(x: 47, y: 9, width: textW - 47, height: 20)
-        authorRow.frame = CGRect(x: 14, y: h - 172, width: textW, height: 38)
-        captionLabel.frame = CGRect(x: 14, y: h - 126, width: textW, height: 40)
+        // 从下往上：收藏 → 爱心 → 头像
+        var y = h - 60 - safeBottom - iconH
+        save.frame = CGRect(x: w - railW - 10, y: y, width: railW, height: iconH)
+        y -= (iconH + gap)
+        heart.frame = CGRect(x: w - railW - 10, y: y, width: railW, height: iconH)
+        y -= (50 + 35)
+        avatarBtn.frame = CGRect(x: w - railW - 10, y: y, width: railW, height: 50)
+        avatarDot.frame = CGRect(x: 0, y: 0, width: 50, height: 50)
+        followBadge.frame = CGRect(x: (50 - 20) / 2, y: 50 - 10, width: 20, height: 20)
+
+        // ===== 文案区：bottom inset 60（官方） =====
+        let textW = w - 80 - 14
+        let captionH: CGFloat = 40
+        let captionBottom = h - 60 - safeBottom
+        captionLabel.frame = CGRect(x: 14, y: captionBottom - captionH,
+                                    width: textW, height: captionH)
+        authorRow.frame = CGRect(x: 14, y: captionLabel.frame.minY - 34 - 5,
+                                 width: textW, height: 34)
+        authorDot.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
+        authorName.frame = CGRect(x: 42, y: 7, width: textW - 42, height: 20)
     }
 }
