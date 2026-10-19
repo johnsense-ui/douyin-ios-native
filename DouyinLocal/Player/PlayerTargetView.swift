@@ -22,7 +22,8 @@ struct PlayerTargetView: View {
     @StateObject private var hearts = HeartBurstManager()
     @ObservedObject private var state = StateStore.shared
 
-    /// 起始页：初始化时就根据 startVid 定好，保证 makeUIView 时 index 已正确
+    /// 起始页（不可变，作为 PlayerStage 的明确起点）
+    private let startIndex: Int
     @State private var index: Int
     @State private var paused = false
     @State private var authorTarget: AuthorTarget?
@@ -34,6 +35,7 @@ struct PlayerTargetView: View {
         self.startVid = startVid
         self.authorName = authorName
         let i = targets.firstIndex(where: { $0.vid == startVid }) ?? 0
+        self.startIndex = i
         _index = State(initialValue: i)
     }
 
@@ -50,6 +52,7 @@ struct PlayerTargetView: View {
                             pool: pool,
                             index: $index,
                             paused: paused,
+                            startAt: startIndex,
                             onTap: handleTap,
                             onDoubleTap: handleDoubleTap,
                             onLike: { state.toggleLike($0) },
