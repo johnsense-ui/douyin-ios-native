@@ -382,9 +382,12 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             onIndexChange?(page)
         }
 
-        // 只刷新当前页的状态显示，不再重复 setActive（会导致画面跳回第一帧）
-        for p in pages where p.pageIndex == page {
-            p.refreshState()
+        // 落位后必须激活当前页：拖动时 bind 会把 isActivePage 重置为 false，
+        // 不在这里设回来，静图就永远撤不掉（表现为画面停在第一帧、声音和进度却在走）。
+        // setActive 内部已做幂等，不会重复 play。
+        for p in pages where p.pageIndex >= 0 {
+            p.setActive(p.pageIndex == page)
+            if p.pageIndex == page { p.refreshState() }
         }
         prefetchAhead(from: page)
     }
