@@ -170,6 +170,8 @@ final class PageVideoView: UIView {
     private(set) var isActivePage = false
     /// 是否真的已经在播放（决定什么时候撤掉静图）
     private var playingStarted = false
+    /// 播放器图层是否真的画出了帧（方案 A 的核心判据）
+    private var layerHasFrame = false
 
     var onLike: ((String) -> Void)?
     var onSave: ((String) -> Void)?
@@ -243,9 +245,16 @@ final class PageVideoView: UIView {
         captionLabel.numberOfLines = 2
         addSubview(captionLabel)
 
-        displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] l, _ in
+        displayObs = playerLayer.observe(\.isReadyForDisplay, options: [.new, .initial]) { [weak self] l, _ in
             guard l.isReadyForDisplay else { return }
-            DispatchQueue.main.async { self?.updateStills() }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // 方案 A：图层真正有帧了，这时才允许撤静图
+                if !self.layerHasFrame {
+                    self.layerHasFrame = true
+                    self.updateStills()
+                }
+            }
         }
 
         NotificationCenter.default.addObserver(
@@ -276,6 +285,7 @@ final class PageVideoView: UIView {
         if vid != item.vid {
             vid = item.vid
             playingStarted = false
+            layerHasFrame = false
             isActivePage = false        // 换了视频，激活态重置，允许重新激活
             frameView.alpha = 0
             frameView.image = nil
@@ -345,9 +355,10 @@ final class PageVideoView: UIView {
 
     // MARK: 画面显示优先级
 
-    /// 唯一规则：只有「当前页 且 真的在播」才撤静图；其余时刻一律用静图盖住
+    /// 唯一规则：只有「当前页 且 真的在播 且 图层真的画出帧」才撤静图
+    /// 方案 A：多等 layerHasFrame 这一环，避免播放器还没出画就把静图撤掉导致黑一帧
     private func updateStills() {
-        let showStill = !(isActivePage && playingStarted)
+        let showStill = !(isActivePage && playingStarted && layerHasFrame)
 
         if showStill {
             if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
@@ -404,6 +415,9 @@ final class PageVideoView: UIView {
 
     func setActive(_ active: Bool) {
         // 幂等：状态没变就不重复触发（重复 play 会让画面跳回第一帧）
+        if !active {
+            layerHasFrame = false
+        }
         if active && isActivePage {
             // 已经是当前页了，不要再触发一次播放
             return
@@ -421,6 +435,9 @@ final class PageVideoView: UIView {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
                     guard let self, self.isActivePage, !self.playingStarted else { return }
                     self.playingStarted = true
+                    // 兜底：400ms 还没收到 isReadyForDisplay 也强制认为有帧，
+                    // 否则静图会一直盖着（表现为画面不动）
+                    self.layerHasFrame = true
                     self.updateStills()
                 }
             }
