@@ -442,9 +442,9 @@ final class PageVideoView: UIView {
 
     func setActive(_ active: Bool) {
         // 幂等：状态没变就不重复触发（重复 play 会让画面跳回第一帧）
-        if !active {
-            layerHasFrame = false
-        }
+        // 注意：取消激活时**不能**清零 layerHasFrame。
+        // 因为 isReadyForDisplay 只在值变化时才回调，清零后回到本页时
+        // 它一直是 true 不再变化 → 永远不会重新置真 → 画面卡在第一帧。
         if active && isActivePage {
             // 已经是当前页了，不要再触发一次播放
             return
@@ -455,6 +455,10 @@ final class PageVideoView: UIView {
             return
         }
         if active {
+            // 如果图层当前就有画面（之前播过），立刻认定有帧，避免静图盖死
+            if playerLayer.isReadyForDisplay {
+                layerHasFrame = true
+            }
             if !playingStarted {
                 p.play()
                 // 兜底：若 350ms 内 tick 没触发（比如 item 切换时时间观察者漏了一次），
