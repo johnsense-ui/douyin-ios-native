@@ -49,31 +49,6 @@ struct ActionButton: View {
 }
 
 /// 作者头像占位（昵称首字）
-extension Theme {
-    /// 头像底色：中性灰（不再用彩色，避免刺眼）
-    /// 按名字做轻微明暗差异，避免所有头像一模一样
-    static func avatarColors(_ seed: String) -> (Color, Color) {
-        var h: UInt32 = 5381
-        for b in seed.utf8 { h = (h &* 33) &+ UInt32(b) }
-        let base = 0.30 + Double(h % 14) / 100.0        // 0.30 … 0.43
-        return (Color(white: base + 0.16), Color(white: base))
-    }
-
-    static func avatarGradient(_ seed: String) -> LinearGradient {
-        let (a, b) = avatarColors(seed)
-        return LinearGradient(colors: [a, b],
-                              startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    /// UIKit 版（PageVideoView 用）
-    static func avatarUIColors(_ seed: String) -> (UIColor, UIColor) {
-        var h: UInt32 = 5381
-        for b in seed.utf8 { h = (h &* 33) &+ UInt32(b) }
-        let base = CGFloat(0.30 + Double(h % 14) / 100.0)
-        return (UIColor(white: base + 0.16, alpha: 1),
-                UIColor(white: base, alpha: 1))
-    }
-}
 struct AvatarView: View {
     let author: Author?
     var size: CGFloat = 44
@@ -85,7 +60,11 @@ struct AvatarView: View {
                     .font(.system(size: size * 0.44, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: size, height: size)
-                    .background(Theme.avatarGradient(a.displayName))
+                    .background(
+                        LinearGradient(colors: [Color(white: 0.58), Color(white: 0.44)],
+                                       startPoint: .topLeading,
+                                       endPoint: .bottomTrailing)
+                    )
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.2))
             } else {
