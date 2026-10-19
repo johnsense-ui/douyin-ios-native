@@ -72,6 +72,13 @@ struct PlayerTargetView: View {
 
             VStack {
                 HStack {
+                    // 位置指示：点第几个就应该显示几
+                    Text("\(index + 1)/\(items.count)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(.black.opacity(0.45)))
                     Spacer()
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
