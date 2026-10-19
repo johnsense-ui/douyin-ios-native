@@ -9,14 +9,19 @@ import SwiftUI
 
 enum Theme {
     // 主色：抖音红
-    static let primary = Color(red: 0xFE / 255.0, green: 0x2C / 255.0, blue: 0x55 / 255.0)
-    static let likeRed = Color(red: 0xFE / 255.0, green: 0x2C / 255.0, blue: 0x55 / 255.0)
+    static let primary = Color(red: 0xF1 / 255.0, green: 0x2F / 255.0, blue: 0x54 / 255.0)   // 抖音官方红 #F12F54
+    static let likeRed = Color(red: 0xF1 / 255.0, green: 0x2F / 255.0, blue: 0x54 / 255.0)
     static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.78)
-    static let textTertiary = Color.white.opacity(0.55)
+    static let textSecondary = Color.white.opacity(0.80)
+    static let textTertiary = Color.white.opacity(0.60)
     static let overlay = Color.black.opacity(0.35)
 
     // 间距（按 390pt 宽设计）
+    // 官方配色（来自 douyin-ios-swift Constants.swift）
+    static let themeGray = Color(red: 0x5C / 255.0, green: 0x5D / 255.0, blue: 0x66 / 255.0)
+    static let themeGrayDark = Color(red: 0x14 / 255.0, green: 0x15 / 255.0, blue: 0x1E / 255.0)
+    static let themeBackground = Color(red: 0x0E / 255.0, green: 0x0F / 255.0, blue: 0x1A / 255.0)
+
     static let hPadding: CGFloat = 14
     static let actionIconSize: CGFloat = 30
     static let actionSpacing: CGFloat = 20
