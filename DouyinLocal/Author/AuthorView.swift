@@ -324,10 +324,10 @@ struct AuthorView: View {
             let lim = 60
             do {
                 while true {
-                    let d = try await APIClient.shared.authorItems(authorId, offset: off, limit: lim,
-                                                     sort: sort == 0 ? "digg" : "new",
-                                                     order: reverse ? "asc" : "desc",
-                                                          sort: sort == 0 ? "digg" : "new")
+                    let d = try await APIClient.shared.authorItems(
+                        authorId, offset: off, limit: lim,
+                        sort: sort == 0 ? "digg" : "new",
+                        order: reverse ? "asc" : "desc")
                     if d.items.isEmpty { break }
                     all.append(contentsOf: d.items)
                     off += d.items.count
