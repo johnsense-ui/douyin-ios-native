@@ -65,6 +65,8 @@ struct ProfileView: View {
                                  authorName: item.author)
             case .author(let t):
                 AuthorView(authorId: t.id)
+            case .settings:
+                SettingsView()
             }
         }
     }
@@ -77,6 +79,8 @@ struct ProfileView: View {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             Spacer()
@@ -87,36 +91,84 @@ struct ProfileView: View {
             Image(systemName: "chevron.down").opacity(0)
                 .font(.system(size: 18, weight: .semibold))
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 0)
     }
 
     // MARK: - 头部
 
     private var header: some View {
-        HStack(spacing: 14) {
-            UserAvatar(name: "我的", size: 76)
-            VStack(alignment: .leading, spacing: 6) {
-                Text("我的收藏夹")
-                    .font(.system(size: 19, weight: .bold))
-                    .foregroundStyle(.white)
-                HStack(spacing: 18) {
-                    stat(state.followingCount, "关注")
-                    stat(0, "粉丝")
-                    stat(state.likedCount, "喜欢")
+        VStack(spacing: 0) {
+            HStack(spacing: 15) {
+                UserAvatar(name: "我的", size: 80)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("我的收藏夹")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                    HStack(spacing: 20) {
+                        stat(state.followingCount, "关注")
+                        stat(0, "粉丝")
+                        stat(state.likedCount, "喜欢")
+                    }
                 }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, 16)
+
+            // 快捷入口
+            HStack(spacing: 9) {
+                quickButton("设置", "gearshape.fill") { route = .settings }
+                quickButton("缓存", "bookmark.fill") { route = .settings }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+
+            Color.clear.frame(height: 16)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 14)
+        .padding(.top, 6)
+        .background(
+            LinearGradient(colors: [Color(white: 0.10), Color.black],
+                           startPoint: .top, endPoint: .bottom)
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(RadialGradient(colors: [Theme.primary.opacity(0.20), .clear],
+                                             center: .center,
+                                             startRadius: 0, endRadius: 120))
+                        .frame(width: 250, height: 250)
+                        .offset(x: 80, y: -120)
+                }
+                .clipped()
+        )
+    }
+
+    private func quickButton(_ title: String, _ icon: String,
+                             _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                Text(title)
+                    .font(.system(size: 13.5, weight: .semibold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.white.opacity(0.09))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func stat(_ n: Int, _ t: String) -> some View {
         HStack(spacing: 4) {
             Text("\(n)")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 17.5, weight: .semibold))
                 .foregroundStyle(.white)
             Text(t)
                 .font(.system(size: 12.5))
@@ -153,7 +205,7 @@ struct ProfileView: View {
                     if n > 0 {
                         Text("\(n)")
                             .font(.system(size: 11))
-                            .foregroundStyle(Theme.textTertiary)
+                            .foregroundStyle(tab == i ? Theme.primary : Theme.textTertiary)
                     }
                 }
                 Capsule()
@@ -312,11 +364,13 @@ struct ProfileView: View {
 enum ProfileRoute: Identifiable {
     case play([FeedItem], FeedItem)
     case author(AuthorTarget)
+    case settings
 
     var id: String {
         switch self {
         case .play(_, let i): return "play-\(i.vid)"
         case .author(let a): return "author-\(a.id)"
+        case .settings: return "settings"
         }
     }
 }
