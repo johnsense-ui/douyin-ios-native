@@ -37,8 +37,8 @@ final class AvatarDot: UIView {
 
     init(size: CGFloat) {
         super.init(frame: CGRect(x: 0, y: 0, width: size, height: size))
-        grad.colors = [UIColor(white: 0.32, alpha: 1).cgColor,
-                       UIColor(white: 0.18, alpha: 1).cgColor]
+        grad.colors = [UIColor(Theme.primary).cgColor,
+                       UIColor(red: 0.36, green: 0.22, blue: 0.62, alpha: 1).cgColor]
         grad.startPoint = CGPoint(x: 0, y: 0)
         grad.endPoint = CGPoint(x: 1, y: 1)
         grad.cornerRadius = size / 2
@@ -65,9 +65,6 @@ final class AvatarDot: UIView {
 
     func set(name: String) {
         label.text = name.first.map(String.init) ?? "?"
-        // 低饱和渐变：每个作者颜色不同，但不刺眼
-        let (a, b) = Theme.avatarUIColors(name)
-        grad.colors = [a.cgColor, b.cgColor]
     }
 }
 
@@ -89,7 +86,7 @@ final class RailItem: UIView {
         addSubview(button)
 
         label.textColor = .white
-        label.font = .systemFont(ofSize: 11.5, weight: .medium)
+        label.font = .systemFont(ofSize: 12, weight: .medium)
         label.textAlignment = .center
         addSubview(label)
     }
@@ -107,7 +104,7 @@ final class RailItem: UIView {
         super.layoutSubviews()
         let w = bounds.width, icon = iconSize
         button.frame = CGRect(x: (w - icon) / 2, y: 0, width: icon, height: icon)
-        label.frame = CGRect(x: 0, y: icon + 2, width: w, height: 14)
+        label.frame = CGRect(x: 0, y: icon + 3, width: w, height: 15)
     }
 
     override func sizeThatFits(_ size: CGSize) -> CGSize { intrinsicContentSize }
@@ -132,8 +129,8 @@ final class PageVideoView: UIView {
     private let avatarBtn = TapRow()
     private let avatarDot = AvatarDot(size: 46)
     private let followBadge = UIView()
-    private let heart = RailItem(systemName: "heart.fill", iconSize: 26)
-    private let save = RailItem(systemName: "bookmark.fill", iconSize: 23)
+    private let heart = RailItem(systemName: "heart.fill")
+    private let save = RailItem(systemName: "bookmark.fill")
 
     private let authorRow = TapRow()
     private let authorDot = AvatarDot(size: 38)
@@ -185,7 +182,7 @@ final class PageVideoView: UIView {
         bottomFade.locations = [0, 1]
         layer.addSublayer(bottomFade)
 
-        barBg.backgroundColor = UIColor.white.withAlphaComponent(0.14)
+        barBg.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         barFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
         addSubview(barBg)
         addSubview(barFill)
@@ -499,20 +496,20 @@ final class PageVideoView: UIView {
         coverView.frame = bounds
         frameView.frame = bounds
         bottomFade.frame = CGRect(x: 0, y: h - 300, width: w, height: 300)
-        barBg.frame = CGRect(x: 0, y: h - 70, width: w, height: 1.2)
-        barFill.frame = CGRect(x: 0, y: h - 70, width: barFill.frame.width, height: 1.2)
+        barBg.frame = CGRect(x: 0, y: h - 80, width: w, height: 1.5)
+        barFill.frame = CGRect(x: 0, y: h - 80, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
 
         let railW: CGFloat = 64
         let items: [UIView] = [avatarBtn, heart, save]
-        let heights: [CGFloat] = [46 + 20,
+        let heights: [CGFloat] = [46 + 8,
                                   heart.intrinsicContentSize.height,
                                   save.intrinsicContentSize.height]
-        let spacing: CGFloat = 15
+        let spacing: CGFloat = 14
         let total = heights.reduce(0, +) + spacing * CGFloat(items.count - 1)
-        var y = h - 86 - total
+        var y = h - 96 - total
         for (i, v) in items.enumerated() {
-            v.frame = CGRect(x: w - railW - 5, y: y, width: railW, height: heights[i])
+            v.frame = CGRect(x: w - railW - 4, y: y, width: railW, height: heights[i])
             y += heights[i] + spacing
         }
         let avatarX = (railW - 46) / 2
@@ -520,9 +517,9 @@ final class PageVideoView: UIView {
         followBadge.frame = CGRect(x: avatarX + (46 - 19) / 2, y: 46 - 12, width: 19, height: 19)
 
         let textW = w - 96 - 14
-        authorDot.frame = CGRect(x: 0, y: 0, width: 34, height: 34)
-        authorName.frame = CGRect(x: 42, y: 7, width: textW - 42, height: 20)
-        authorRow.frame = CGRect(x: 14, y: h - 170, width: textW, height: 34)
-        captionLabel.frame = CGRect(x: 14, y: h - 132, width: textW, height: 40)
+        authorDot.frame = CGRect(x: 0, y: 0, width: 38, height: 38)
+        authorName.frame = CGRect(x: 47, y: 9, width: textW - 47, height: 20)
+        authorRow.frame = CGRect(x: 14, y: h - 172, width: textW, height: 38)
+        captionLabel.frame = CGRect(x: 14, y: h - 126, width: textW, height: 40)
     }
 }
