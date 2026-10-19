@@ -68,17 +68,19 @@ final class APIClient {
 
     /// 作者作品，full=true 返回含视频地址的完整条目（可直接播放）
     func authorItems(_ authorId: String, offset: Int = 0,
-                     limit: Int = 30, sort: String = "new") async throws -> FeedAuthorPage {
+                     limit: Int = 30, sort: String = "new",
+                     order: String = "desc") async throws -> FeedAuthorPage {
         try await get("api2/author/\(authorId)",
                       ["offset": "\(offset)", "limit": "\(limit)",
-                       "full": "1", "sort": sort])
+                       "full": "1", "sort": sort, "order": order])
     }
 
     func author(_ authorId: String, offset: Int = 0, limit: Int = 30,
-                full: Bool = false, sort: String = "new") async throws -> AuthorDetail {
+                full: Bool = false, sort: String = "new",
+                order: String = "desc") async throws -> AuthorDetail {
         try await get("api2/author/\(authorId)",
                       ["offset": "\(offset)", "limit": "\(limit)",
-                       "full": full ? "1" : "0", "sort": sort])
+                       "full": full ? "1" : "0", "sort": sort, "order": order])
     }
 
     func authors(offset: Int = 0, limit: Int = 50, q: String? = nil) async throws -> AuthorList {
