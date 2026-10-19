@@ -27,6 +27,8 @@ struct PlayerStage: UIViewRepresentable {
     var onSave: (String) -> Void = { _ in }
     var onAuthor: (String) -> Void = { _ in }
     var onSwipeLeft: (Int) -> Void = { _ in }
+    /// 倍速清屏开关（交给 SwiftUI 隐藏顶栏/底栏）
+    var onSpeedMode: ((Bool) -> Void)?
 
     func makeUIView(context: Context) -> StageView {
         let v = StageView()
@@ -166,10 +168,19 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         case .began:
             adjustingRate = true
             pool?.setRate(2.0, vid: vid)
+            // 清屏：隐藏右栏/文案/进度条，底部显示倍速提示
+            for p in pages where p.pageIndex == settledPage {
+                p.setSpeedMode(true)
+            }
+            onSpeedMode?(true)
         case .ended, .cancelled, .failed:
             if adjustingRate {
                 adjustingRate = false
                 pool?.setRate(1.0, vid: vid)
+                for p in pages where p.pageIndex >= 0 {
+                    p.setSpeedMode(false)
+                }
+                onSpeedMode?(false)
             }
         default:
             break
