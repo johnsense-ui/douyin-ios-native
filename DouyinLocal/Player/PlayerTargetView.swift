@@ -1,4 +1,4 @@
-//
+﻿//
 //  PlayerTargetView.swift
 //  DouyinLocal
 //
@@ -22,11 +22,20 @@ struct PlayerTargetView: View {
     @StateObject private var hearts = HeartBurstManager()
     @ObservedObject private var state = StateStore.shared
 
-    @State private var index = 0
+    /// 起始页：初始化时就根据 startVid 定好，保证 makeUIView 时 index 已正确
+    @State private var index: Int
     @State private var paused = false
     @State private var authorTarget: AuthorTarget?
 
     private var items: [FeedItem] { targets }
+
+    init(targets: [FeedItem], startVid: String, authorName: String) {
+        self.targets = targets
+        self.startVid = startVid
+        self.authorName = authorName
+        let i = targets.firstIndex(where: { $0.vid == startVid }) ?? 0
+        _index = State(initialValue: i)
+    }
 
     var body: some View {
         ZStack {
@@ -78,13 +87,8 @@ struct PlayerTargetView: View {
         .statusBarHidden(true)
         .preferredColorScheme(.dark)
         .onAppear {
-            if let i = items.firstIndex(where: { $0.vid == startVid }) {
-                index = i
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                guard !items.isEmpty else { return }
-                pool.focus(on: items, index: min(index, items.count - 1))
-            }
+            // 播放/激活统一由 StageView.configure 负责（起始页已在 init 中确定），
+            // 这里不再重复 focus，避免两处同时触发导致画面被静图盖住
         }
         .onChange(of: index) { _, new in
             guard new < items.count else { return }
