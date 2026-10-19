@@ -295,6 +295,7 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         // 预热下一条解码器（不播放，只建管线）——落位后 play 时几乎零延迟
         if page + 1 < items.count {
             let next = items[page + 1]
+            pool?.prerollFirstFrame(next)
             // 先确保它有播放器，再预热
             _ = pool?.player(for: next)
             pool?.preroll(next)
@@ -385,8 +386,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             if idx == settledPage {
                 p.setActive(true)
             } else {
-                // 邻页不播放，只预热解码器，落位时能秒起
+                // 邻页不播放：预热解码器 + 预滚首帧（方案B）
+                // 预滚让图层里先有真实画面，切过来时静图淡出即可无缝衔接
                 pool?.preroll(items[idx])
+                pool?.prerollFirstFrame(items[idx])
             }
         }
 
