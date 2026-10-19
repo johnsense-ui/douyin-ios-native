@@ -82,14 +82,29 @@ final class PlayerSlot: NSObject {
         }
     }
 
-    /// 预载：让解码器把首帧解出来。
-    /// 注意：AVPlayerLooper 下不能 seek，也不要在已就绪时反复调用，
-    /// 否则会让视频轨重置回队首（表现为画面跳回第一帧）。
-    func preloadFrame() {
+    /// 预滚首帧（方案 B）：
+    /// 静音播放极短时间让解码器真正吐出一帧，然后暂停。
+    /// 这样 AVPlayerLayer 里已经有真实画面，切到当前页时可以无缝接管。
+    /// 注意：AVPlayerLooper 下不能 seek，也不能长时间播放（会被用户看到动）。
+    func prerollFirstFrame() {
         guard player.rate <= 0 else { return }
-        guard !ready else { return }
-        player.playImmediately(atRate: 0)
+        guard ready else { return }
+        guard !hasPreparedFrame else { return }
+
+        player.isMuted = true
+        player.playImmediately(atRate: 1.0)
+
+        // 60ms 足够解码出首帧；之后立刻暂停
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+            guard let self else { return }
+            self.player.pause()
+            self.hasPreparedFrame = true
+            self.player.isMuted = false
+        }
     }
+
+    /// 标记已预滚过首帧
+    private var hasPreparedFrame = false
 
     /// 幂等播放：已经在播就不重复调用。
     /// AVQueuePlayer + AVPlayerLooper 下重复 playImmediately 会把视频轨切回队首，
@@ -139,6 +154,7 @@ final class PlayerSlot: NSObject {
         vid = nil
         ready = false
         wantsPreroll = false
+        hasPreparedFrame = false
     }
 
     deinit {
@@ -233,6 +249,12 @@ final class PlayerPool: ObservableObject {
     func preloadFrame(_ item: FeedItem) {
         let i = assign(item)
         slots[i].preloadFrame()
+    }
+
+    /// 预滚首帧：让图层里有真实画面
+    func prerollFirstFrame(_ item: FeedItem) {
+        let i = assign(item)
+        slots[i].prerollFirstFrame()
     }
 
     /// 预热下一条的解码器（不等它 ready 就提前建管线）
