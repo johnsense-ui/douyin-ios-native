@@ -42,8 +42,9 @@ struct PlayerStage: UIViewRepresentable {
         v.applyPaused(paused)
         if v.itemsCount != items.count {
             v.configure(items: items, startAt: startAt ?? index)
-        } else if v.settledPage != index {
-            v.jumpTo(index)
+        } else if v.currentIndex != index {
+            // 用 currentPage 而不是 settledPage 判断，且只有在用户真的滑动过之后才跟随
+            v.followExternalIndex(index)
         }
     }
 
@@ -85,6 +86,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
     private(set) var itemsCount = 0
     private(set) var settledPage = 0
     private var centerPage = 0
+    /// SwiftUI 明确指定的起始页（一旦设定，后续 configure 都以它为准直到被跳转）
+    private var explicitStart: Int?
+    /// configure 时 bounds 还没准备好，标记延迟重做
+    private var needsReconfigure = false
 
     var onIndexChange: ((Int) -> Void)?
     var onTap: (() -> Void)?
@@ -196,6 +201,23 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         if scrollView.contentSize != size {
             scrollView.contentSize = size
         }
+
+        // configure 时高度还是 0 的情况，这里补做一次
+        if needsReconfigure, bounds.height > 0, itemsCount > 0 {
+            needsReconfigure = false
+            let target = explicitStart ?? settledPage
+            settledPage = max(0, min(target, itemsCount - 1))
+            centerPage = settledPage
+            scrollView.setContentOffset(
+                CGPoint(x: 0, y: CGFloat(settledPage) * bounds.height), animated: false)
+            pool?.keep(items, around: settledPage)
+            syncPages()
+            pool?.focus(on: items, index: settledPage)
+            activate(page: settledPage)
+            prefetchAhead(from: settledPage)
+            return
+        }
+
         syncPages()
     }
 
@@ -203,11 +225,22 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         self.items = items
         itemsCount = items.count
         if let page {
+            explicitStart = page
             settledPage = max(0, min(page, max(itemsCount - 1, 0)))
+        } else if let e = explicitStart {
+            // 再次 configure（比如列表条数变化）时保持原定起点
+            settledPage = max(0, min(e, max(itemsCount - 1, 0)))
         } else {
             settledPage = min(settledPage, max(itemsCount - 1, 0))
         }
         centerPage = settledPage
+
+        // 关键：此时 bounds 可能还是 0（尚未布局），偏移量设置会失效，
+        // 标记一下，等 layoutSubviews 里再做一次
+        if bounds.height <= 0 {
+            needsReconfigure = true
+            return
+        }
 
         for p in pages {
             p.pageIndex = -1
@@ -275,6 +308,20 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
                 VideoCache.shared.prefetch(Array(items[lo...hi]), limit: 3)
             }
         }
+    }
+
+    /// 当前滚动位置对应的页（不受 settledPage 影响）
+    var currentIndex: Int {
+        guard bounds.height > 0 else { return settledPage }
+        return max(0, min(Int((scrollView.contentOffset.y / bounds.height).rounded()),
+                          max(itemsCount - 1, 0)))
+    }
+
+    /// 外部 index 变化时跟随（例如 SwiftUI 重建后）
+    func followExternalIndex(_ i: Int) {
+        guard i >= 0, i < itemsCount else { return }
+        guard i != settledPage, bounds.height > 0 else { return }
+        jumpTo(i)
     }
 
     func jumpTo(_ i: Int) {
