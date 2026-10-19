@@ -33,6 +33,8 @@ struct SearchView: View {
     @State private var history: [String] = []
 
     @State private var route: SearchRoute?
+    /// 搜索结果对应的完整播放列表（支持上下滑）
+    @State private var playList: [FeedItem] = []
 
     @FocusState private var focused: Bool
 
@@ -67,8 +69,10 @@ struct SearchView: View {
             switch r {
             case .author(let aid):
                 AuthorView(authorId: aid)
-            case .play(let item):
-                PlayerTargetView(targets: [item], startVid: item.vid, authorName: item.author)
+            case .play(let startVid):
+                PlayerTargetView(targets: playList,
+                                 startVid: startVid,
+                                 authorName: playList.first(where: { $0.vid == startVid })?.author ?? "")
             }
         }
     }
@@ -431,13 +435,16 @@ struct SearchView: View {
         }
     }
 
+    /// 点搜索结果里的视频 → 拉「整个搜索结果」的完整条目，从点击这条开始上下滑
     private func openVideo(_ g: VideoThumb) {
+        let ids = videos.map { $0.vid }
+        let startVid = g.vid
         Task {
-            if let r = try? await APIClient.shared.videos(byIDs: [g.vid]),
-               let item = r.items.first {
-                await MainActor.run {
-                    route = .play(item)
-                }
+            guard let r = try? await APIClient.shared.videos(byIDs: ids),
+                  !r.items.isEmpty else { return }
+            await MainActor.run {
+                playList = r.items
+                route = .play(startVid)
             }
         }
     }
@@ -471,12 +478,12 @@ struct SearchView: View {
 
 enum SearchRoute: Identifiable {
     case author(String)
-    case play(FeedItem)
+    case play(String)          // 起始 vid
 
     var id: String {
         switch self {
         case .author(let a): return "author-\(a)"
-        case .play(let i): return "play-\(i.vid)"
+        case .play(let v): return "play-\(v)"
         }
     }
 }
