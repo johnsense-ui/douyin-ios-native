@@ -1,4 +1,4 @@
-//
+﻿//
 //  FeedView.swift
 //  DouyinLocal
 //
@@ -64,6 +64,8 @@ struct FeedView: View {
                             .font(.system(size: 20, weight: .medium))
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.5), radius: 4)
+                            .frame(width: 52, height: 52)      // 触摸区
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     Spacer()
@@ -72,11 +74,13 @@ struct FeedView: View {
                             .font(.system(size: 22, weight: .medium))
                             .foregroundStyle(.white)
                             .shadow(color: .black.opacity(0.5), radius: 4)
+                            .frame(width: 52, height: 52)      // 触摸区
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 6)
+                .padding(.horizontal, 3)
+                .padding(.top, -8)
                 Spacer()
             }
 
@@ -215,6 +219,8 @@ struct FeedView: View {
                     .frame(width: 18, height: 2)
             }
             .shadow(color: .black.opacity(0.45), radius: 3)
+            .frame(minWidth: 88, minHeight: 52)     // 整块可点
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -237,8 +243,7 @@ struct UserAvatar: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(
-                LinearGradient(colors: [Theme.primary.opacity(0.92),
-                                        Color(red: 0.36, green: 0.22, blue: 0.62)],
+                LinearGradient(colors: [Color(white: 0.58), Color(white: 0.44)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             .clipShape(Circle())
