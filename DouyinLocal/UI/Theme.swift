@@ -85,7 +85,7 @@ struct AvatarView: View {
                     .font(.system(size: size * 0.44, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: size, height: size)
-                    .background(Theme.avatarGradient(a.name))
+                    .background(Theme.avatarGradient(a.displayName))
                     .clipShape(Circle())
                     .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1.2))
             } else {
