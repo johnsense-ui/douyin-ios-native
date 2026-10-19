@@ -94,7 +94,7 @@ struct FeedView: View {
                     tabItem("推荐", selected: true) {}
                     tabItem("我的", selected: false) { route = .profile }
                 }
-                .padding(.bottom, 0)      // 整体下移，贴近 Home 指示条上方
+                .padding(.bottom, -6)     // 再往下压一点
             }
             .opacity(speedMode ? 0 : 1)
             .animation(.easeOut(duration: 0.18), value: speedMode)
