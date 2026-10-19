@@ -101,13 +101,26 @@ struct SearchView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 11)
-            .frame(height: 34)
-            .background(RoundedRectangle(cornerRadius: 17).fill(Color(white: 0.16)))
+            .padding(.horizontal, 13)
+            .frame(height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(white: 0.11))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18)
+                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                    )
+            )
 
-            Button("取消") { dismiss() }
-                .font(.system(size: 14.5))
-                .foregroundStyle(.white)
+            Button { dismiss() } label: {
+                Text("取消")
+                    .font(.system(size: 14.5))
+                    .foregroundStyle(.white)
+                    .frame(height: 44)
+                    .padding(.horizontal, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -119,16 +132,15 @@ struct SearchView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 if !history.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("搜索历史")
-                                .font(.system(size: 14.5, weight: .semibold))
-                                .foregroundStyle(.white)
-                            Spacer()
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionHeader("搜索历史") {
                             Button { clearHistory() } label: {
-                                Text("清空")
-                                    .font(.system(size: 12.5))
-                                    .foregroundStyle(Theme.textTertiary)
+                                HStack(spacing: 4) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 11))
+                                    Text("清空").font(.system(size: 12.5))
+                                }
+                                .foregroundStyle(Theme.textTertiary)
                             }
                             .buttonStyle(.plain)
                         }
@@ -138,12 +150,8 @@ struct SearchView: View {
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Text("猜你想搜")
-                            .font(.system(size: 14.5, weight: .semibold))
-                            .foregroundStyle(.white)
-                        Spacer()
+                VStack(alignment: .leading, spacing: 4) {
+                    sectionHeader("猜你想搜") {
                         Button {
                             Task { await loadSuggest() }
                         } label: {
@@ -152,10 +160,9 @@ struct SearchView: View {
                                     ProgressView().tint(Theme.textTertiary).scaleEffect(0.6)
                                 } else {
                                     Image(systemName: "arrow.triangle.2.circlepath")
-                                        .font(.system(size: 12))
+                                        .font(.system(size: 11.5))
                                 }
-                                Text("换一批")
-                                    .font(.system(size: 12.5))
+                                Text("换一批").font(.system(size: 12.5))
                             }
                             .foregroundStyle(Theme.textTertiary)
                         }
@@ -163,44 +170,124 @@ struct SearchView: View {
                     }
 
                     if suggests.isEmpty && suggestLoading {
-                        ProgressView().tint(.white).padding(.top, 10)
+                        ProgressView().tint(.white).padding(.vertical, 16)
                     } else {
                         VStack(spacing: 0) {
-                            ForEach(Array(suggests.enumerated()), id: \.element.id) { i, s in
-                                Button {
-                                    runSearch(s.text)
-                                } label: {
-                                    HStack(spacing: 10) {
-                                        Image(systemName: s.isAuthor ? "person.fill" : "magnifyingglass")
-                                            .font(.system(size: 12))
-                                            .foregroundStyle(Theme.textTertiary)
-                                            .frame(width: 16)
-                                        Text(s.text)
-                                            .font(.system(size: 14))
-                                            .foregroundStyle(.white.opacity(0.9))
-                                            .lineLimit(1)
-                                        Spacer()
-                                        Image(systemName: "arrow.up.left")
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(Theme.textTertiary.opacity(0.6))
-                                    }
-                                    .padding(.vertical, 11)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                if i < suggests.count - 1 {
-                                    Divider().background(Color.white.opacity(0.07))
-                                }
+                            ForEach(Array(suggests.enumerated()), id: \.element.id) { i, sg in
+                                rankRow(i, sg)
                             }
                         }
                     }
                 }
+
+                if !suggests.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sectionHeader("热门话题") { EmptyView() }
+                        topicGrid
+                    }
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .padding(.top, 4)
             .padding(.bottom, 40)
         }
         .scrollIndicators(.hidden)
+    }
+
+    /// 小节标题 + 右侧操作
+    private func sectionHeader<T: View>(_ title: String,
+                                        @ViewBuilder trailing: () -> T) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white)
+            Spacer()
+            trailing()
+        }
+    }
+
+    /// 排行榜行：序号 + 关键词 + 热标 + 箭头
+    private func rankRow(_ i: Int, _ sg: SuggestItem) -> some View {
+        Button {
+            runSearch(sg.text)
+        } label: {
+            HStack(spacing: 11) {
+                Text("\(i + 1)")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(i < 3 ? Theme.primary : Theme.textTertiary)
+                    .frame(width: 18)
+
+                Text(sg.text)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+
+                if i < 3 {
+                    Text("热")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.primary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Theme.primary.opacity(0.16))
+                        )
+                }
+
+                Spacer(minLength: 6)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.textTertiary.opacity(0.5))
+            }
+            .frame(height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 热门话题：3 列 2 行
+    private var topicGrid: some View {
+        let items = Array(suggests.prefix(6))
+        return LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8),
+                                       count: 3),
+                         spacing: 8) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, sg in
+                Button {
+                    runSearch(sg.text)
+                } label: {
+                    ZStack(alignment: .bottomLeading) {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(topicGradient(i))
+                            .frame(height: 132)
+                        LinearGradient(colors: [.clear, .black.opacity(0.65)],
+                                       startPoint: .top, endPoint: .bottom)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        Text(sg.text)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .padding(7)
+                            .shadow(color: .black.opacity(0.7), radius: 3)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    /// 话题卡片的渐变底（深色低饱和，不抢眼）
+    private func topicGradient(_ i: Int) -> LinearGradient {
+        let hues: [(Double, Double)] = [
+            (0.02, 0.10), (0.55, 0.12), (0.72, 0.10),
+            (0.92, 0.11), (0.35, 0.09), (0.62, 0.13)
+        ]
+        let (h, s) = hues[i % hues.count]
+        return LinearGradient(
+            colors: [Color(hue: h, saturation: s, brightness: 0.34),
+                     Color(hue: h, saturation: s * 0.8, brightness: 0.16)],
+            startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private func historyChip(_ h: String) -> some View {
@@ -355,6 +442,7 @@ struct SearchView: View {
             }
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     private func sectionTitle(_ t: String, _ n: Int) -> some View {
