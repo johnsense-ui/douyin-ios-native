@@ -37,8 +37,8 @@ final class AvatarDot: UIView {
 
     init(size: CGFloat) {
         super.init(frame: CGRect(x: 0, y: 0, width: size, height: size))
-        grad.colors = [UIColor(Theme.primary).cgColor,
-                       UIColor(red: 0.36, green: 0.22, blue: 0.62, alpha: 1).cgColor]
+        grad.colors = [UIColor(white: 0.58, alpha: 1).cgColor,
+                       UIColor(white: 0.44, alpha: 1).cgColor]
         grad.startPoint = CGPoint(x: 0, y: 0)
         grad.endPoint = CGPoint(x: 1, y: 1)
         grad.cornerRadius = size / 2
