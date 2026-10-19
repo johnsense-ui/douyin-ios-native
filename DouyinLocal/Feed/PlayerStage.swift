@@ -27,7 +27,6 @@ struct PlayerStage: UIViewRepresentable {
     var onSave: (String) -> Void = { _ in }
     var onAuthor: (String) -> Void = { _ in }
     var onSwipeLeft: (Int) -> Void = { _ in }
-    /// 倍速清屏开关（交给 SwiftUI 隐藏顶栏/底栏）
     var onSpeedMode: ((Bool) -> Void)?
 
     func makeUIView(context: Context) -> StageView {
@@ -51,6 +50,9 @@ struct PlayerStage: UIViewRepresentable {
     }
 
     private func bind(_ v: StageView) {
+        v.onSpeedMode = { on in
+            DispatchQueue.main.async { onSpeedMode?(on) }
+        }
         v.onIndexChange = { newIndex in
             DispatchQueue.main.async {
                 if index != newIndex { index = newIndex }
@@ -100,6 +102,8 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
     var onSave: ((String) -> Void)?
     var onAuthor: ((String) -> Void)?
     var onSwipeLeft: ((Int) -> Void)?
+    /// 倍速清屏开关
+    var onSpeedMode: ((Bool) -> Void)?
 
     private var pausedNow = false
     private var adjustingRate = false
