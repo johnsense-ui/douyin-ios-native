@@ -143,6 +143,11 @@ final class PageVideoView: UIView {
     /// 底衬：同一帧放大填满并压暗，用来消除 letterbox 黑边（不裁切主画面）
     private let backdropView = UIImageView()
     /// 底部渐变：替代文字阴影，一个图层解决可读性（比 5 处阴影便宜得多）
+    /// 倍速播放时的底部提示（清屏状态下唯一显示的东西）
+    private let speedLabel = UILabel()
+    /// 是否处于倍速清屏状态
+    private(set) var speedMode = false
+
     private let bottomFade = CAGradientLayer()
 
     private let barBg = UIView()
@@ -205,6 +210,13 @@ final class PageVideoView: UIView {
                              UIColor.black.withAlphaComponent(0.55).cgColor]
         bottomFade.locations = [0, 1]
         layer.addSublayer(bottomFade)
+
+        speedLabel.textColor = .white
+        speedLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        speedLabel.textAlignment = .center
+        speedLabel.text = "2.0x 倍速播放中"
+        speedLabel.alpha = 0
+        addSubview(speedLabel)
 
         barBg.backgroundColor = UIColor.white.withAlphaComponent(0.22)
         barFill.backgroundColor = UIColor.white.withAlphaComponent(0.9)
@@ -413,6 +425,21 @@ final class PageVideoView: UIView {
 
     // MARK: 播放状态
 
+    /// 进入/退出倍速清屏：隐藏所有覆盖层，只在底部黑边里留一行「2.0x 倍速播放中」
+    func setSpeedMode(_ on: Bool) {
+        guard speedMode != on else { return }
+        speedMode = on
+        let hidden: [UIView] = [avatarBtn, heart, save, authorRow, captionLabel,
+                                barBg, barFill]
+        UIView.animate(withDuration: on ? 0.18 : 0.22,
+                       delay: 0,
+                       options: [.curveEaseOut]) {
+            for v in hidden { v.alpha = on ? 0 : 1 }
+            self.bottomFade.opacity = on ? 0 : 1
+            self.speedLabel.alpha = on ? 1 : 0
+        }
+    }
+
     func setActive(_ active: Bool) {
         // 幂等：状态没变就不重复触发（重复 play 会让画面跳回第一帧）
         if !active {
@@ -533,8 +560,15 @@ final class PageVideoView: UIView {
         coverView.frame = bounds
         frameView.frame = bounds
         bottomFade.frame = CGRect(x: 0, y: h - 300, width: w, height: 300)
-        barBg.frame = CGRect(x: 0, y: h - 55 - safeAreaInsets.bottom, width: w, height: 1.5)
-        barFill.frame = CGRect(x: 0, y: h - 55 - safeAreaInsets.bottom, width: barFill.frame.width, height: 1.5)
+        let lbForLabel = max(0, (h - w * 16.0 / 9.0) / 2)
+        speedLabel.frame = CGRect(x: 0, y: h - lbForLabel / 2 - 9,
+                                  width: w, height: 18)
+        // 9:16 视频等比铺满宽度后，上下各留 (h - w*16/9)/2 的黑边
+        // 进度条正好压在视频画面的底边上（iPhone 14 Pro 上约 76.7pt）
+        let letterbox = max(0, (h - w * 16.0 / 9.0) / 2)
+        let barY = h - letterbox
+        barBg.frame = CGRect(x: 0, y: barY, width: w, height: 1.5)
+        barFill.frame = CGRect(x: 0, y: barY, width: barFill.frame.width, height: 1.5)
         CATransaction.commit()
 
         // ===== 右栏：抖音官方 AwemeListCell 参数 =====
@@ -545,7 +579,7 @@ final class PageVideoView: UIView {
         let safeBottom = safeAreaInsets.bottom
 
         // 从下往上：收藏 → 爱心 → 头像
-        var y = h - 60 - safeBottom - iconH
+        var y = barY - iconH
         save.frame = CGRect(x: w - railW - 10, y: y, width: railW, height: iconH)
         y -= (iconH + gap)
         heart.frame = CGRect(x: w - railW - 10, y: y, width: railW, height: iconH)
@@ -557,7 +591,8 @@ final class PageVideoView: UIView {
         // ===== 文案区：bottom inset 60（官方） =====
         let textW = w - 80 - 14
         let captionH: CGFloat = 40
-        let captionBottom = h - 60 - safeBottom
+        // 文案底部留出进度条 + 8pt 间隙
+        let captionBottom = barY - 8
         captionLabel.frame = CGRect(x: 14, y: captionBottom - captionH,
                                     width: textW, height: captionH)
         authorRow.frame = CGRect(x: 14, y: captionLabel.frame.minY - 34 - 5,
