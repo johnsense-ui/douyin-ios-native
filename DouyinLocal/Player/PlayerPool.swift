@@ -245,12 +245,6 @@ final class PlayerPool: ObservableObject {
         return slots[i].ready
     }
 
-    /// 预载某条视频并停在第一帧（拖动时就能看到画面）
-    func preloadFrame(_ item: FeedItem) {
-        let i = assign(item)
-        slots[i].preloadFrame()
-    }
-
     /// 预滚首帧：让图层里有真实画面
     func prerollFirstFrame(_ item: FeedItem) {
         let i = assign(item)
@@ -309,7 +303,7 @@ final class PlayerPool: ObservableObject {
         // 预载下一条的第一帧（拖动时能看到画面）
         if index + 1 < items.count {
             let n = assign(items[index + 1])
-            slots[n].preloadFrame()
+            slots[n].prerollFirstFrame()
         }
 
         // 释放窗口外
