@@ -97,10 +97,10 @@ struct ProfileView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            UserAvatar(name: "我的", size: 76)
+            UserAvatar(name: "我的", size: 90)
             VStack(alignment: .leading, spacing: 6) {
                 Text("我的收藏夹")
-                    .font(.system(size: 19, weight: .bold))
+                    .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(.white)
                 HStack(spacing: 18) {
                     stat(state.followingCount, "关注")
@@ -118,7 +118,7 @@ struct ProfileView: View {
     private func stat(_ n: Int, _ t: String) -> some View {
         HStack(spacing: 4) {
             Text("\(n)")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(.white)
             Text(t)
                 .font(.system(size: 12.5))
