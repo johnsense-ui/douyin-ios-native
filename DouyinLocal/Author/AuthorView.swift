@@ -22,7 +22,8 @@ struct AuthorView: View {
     @State private var playing: PlayStart?
     @State private var playItems: [FeedItem] = []
     @State private var preparing = false
-    @State private var sort = 0            // 0 = 点赞优先, 1 = 时间优先
+    @State private var sort = 1            // 0 = 点赞优先, 1 = 时间优先（默认时间优先）
+    @State private var reverse = false     // 倒序：false = 默认序，true = 反过来
     @ObservedObject private var state = StateStore.shared
 
     private var limit = 30
@@ -44,7 +45,8 @@ struct AuthorView: View {
                 Color.black.ignoresSafeArea()
 
                 ScrollView {
-                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    // 不再固定头部：往上滑时整块滚出屏幕（方案 A）
+                    LazyVStack(spacing: 0) {
                         Section {
                             grid
                         } header: {
@@ -194,9 +196,29 @@ struct AuthorView: View {
                 sortTab(0, "点赞优先")
                 sortTab(1, "时间优先")
                 Spacer()
+
                 Text("\(total) 个作品")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textTertiary)
+
+                // 倒序切换：时间优先=旧的在前；点赞优先=少的在前
+                Button {
+                    reverse.toggle()
+                    Task { await load(reset: true) }
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: reverse
+                              ? "arrow.up.arrow.down.circle.fill"
+                              : "arrow.up.arrow.down.circle")
+                            .font(.system(size: 15, weight: .medium))
+                        Text(reverse ? "倒序" : "正序")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(reverse ? Theme.primary : Theme.textTertiary)
+                    .frame(height: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
             .padding(.top, 14)
         }
@@ -303,6 +325,8 @@ struct AuthorView: View {
             do {
                 while true {
                     let d = try await APIClient.shared.authorItems(authorId, offset: off, limit: lim,
+                                                     sort: sort == 0 ? "digg" : "new",
+                                                     order: reverse ? "asc" : "desc",
                                                           sort: sort == 0 ? "digg" : "new")
                     if d.items.isEmpty { break }
                     all.append(contentsOf: d.items)
@@ -337,8 +361,10 @@ struct AuthorView: View {
         loading = true
         defer { loading = false }
         do {
-            let d = try await APIClient.shared.author(authorId, offset: offset, limit: limit,
-                                                         sort: sort == 0 ? "digg" : "new")
+            let d = try await APIClient.shared.author(
+                authorId, offset: offset, limit: limit,
+                sort: sort == 0 ? "digg" : "new",
+                order: reverse ? "asc" : "desc")
             author = d.author
             total = d.total
             if reset { items = d.items } else { items.append(contentsOf: d.items) }
