@@ -28,6 +28,8 @@
 		A1B2C3D40000000000000971 /* PageVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000970 /* PageVideoView.swift */; };
 		A1B2C3D40000000000000981 /* FramePrefetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000980 /* FramePrefetcher.swift */; };
 		A1B2C3D40000000000000991 /* VideoCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000990 /* VideoCache.swift */; };
+		A1B2C3D40000000000000993 /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000992 /* Diagnostics.swift */; };
+		A1B2C3D40000000000000995 /* SelfCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000994 /* SelfCheck.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +56,8 @@
 		A1B2C3D40000000000000970 /* PageVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageVideoView.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000980 /* FramePrefetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FramePrefetcher.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000990 /* VideoCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoCache.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000992 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostics.swift; sourceTree = "<group>"; };
+		A1B2C3D40000000000000994 /* SelfCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCheck.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -91,6 +95,7 @@
 				A1B2C3D40000000000000302 /* Info.plist */,
 				A1B2C3D40000000000000904 /* Profile */,
 				A1B2C3D40000000000000954 /* Settings */,
+				A1B2C3D4FFFFFFFF0000FFF1 /* Diagnostics */,
 			);
 			path = DouyinLocal;
 			sourceTree = "<group>";
@@ -200,6 +205,15 @@
 			path = Settings;
 			sourceTree = "<group>";
 		};
+		A1B2C3D4FFFFFFFF0000FFF1 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40000000000000992 /* Diagnostics.swift */,
+				A1B2C3D40000000000000994 /* SelfCheck.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = <group>;
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -289,6 +303,8 @@
 				A1B2C3D40000000000000971 /* PageVideoView.swift in Sources */,
 				A1B2C3D40000000000000981 /* FramePrefetcher.swift in Sources */,
 				A1B2C3D40000000000000991 /* VideoCache.swift in Sources */,
+				A1B2C3D40000000000000993 /* Diagnostics.swift in Sources */,
+				A1B2C3D40000000000000995 /* SelfCheck.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
