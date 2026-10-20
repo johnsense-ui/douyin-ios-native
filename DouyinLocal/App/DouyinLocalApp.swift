@@ -7,6 +7,13 @@ import SwiftUI
 
 @main
 struct DouyinLocalApp: App {
+    init() {
+        // 排障模式持久化：上次开启过就继续记录
+        let on = UserDefaults.standard.bool(forKey: "debug.logEnabled")
+        Diagnostics.shared.setEnabled(on)
+        dlog(.app, "App 启动 server=\(APIClient.baseURL.absoluteString) 排障=\(on)")
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
