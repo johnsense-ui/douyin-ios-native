@@ -50,7 +50,9 @@ final class PlayerSlot: NSObject {
 
         // 有本地缓存就播本地（seek/循环都不会黑），否则先播网络流
         let url = VideoCache.shared.localURL(item.vid) ?? remote
-        if url.isFileURL { VideoCache.shared.pin(item.vid) }
+        let isLocal = url.isFileURL
+        if isLocal { VideoCache.shared.pin(item.vid) }
+        dlog(.play, vid: item.vid, "prepare 源=\(isLocal ? "本地缓存" : "网络")")
 
         let pi = AVPlayerItem(url: url)
         pi.preferredForwardBufferDuration = 2.0
@@ -61,7 +63,10 @@ final class PlayerSlot: NSObject {
             DispatchQueue.main.async {
                 guard self.ready != ok else { return }
                 self.ready = ok
-                if ok, let v = self.vid { self.onReady?(v) }
+                if ok, let v = self.vid {
+                    dlog(.play, vid: v, "status=readyToPlay")
+                    self.onReady?(v)
+                }
                 if ok { self.prerollIfWanted() }
             }
         }
@@ -90,6 +95,7 @@ final class PlayerSlot: NSObject {
         guard player.rate <= 0 else { return }
         guard ready else { return }
         guard !hasPreparedFrame else { return }
+        dlog(.play, vid: vid ?? "-", "预滚首帧开始")
 
         player.isMuted = true
         player.playImmediately(atRate: 1.0)
@@ -100,6 +106,7 @@ final class PlayerSlot: NSObject {
             self.player.pause()
             self.hasPreparedFrame = true
             self.player.isMuted = false
+            dlog(.play, vid: self.vid ?? "-", "预滚首帧完成 t=\(String(format: "%.3f", self.player.currentTime().seconds))")
         }
     }
 
@@ -110,10 +117,17 @@ final class PlayerSlot: NSObject {
     /// AVQueuePlayer + AVPlayerLooper 下重复 playImmediately 会把视频轨切回队首，
     /// 表现为「画面跳回第一帧、声音继续」。
     func play() {
-        if player.rate > 0 { return }
+        if player.rate > 0 {
+            dlog(.play, vid: vid ?? "-", "play 跳过（已在播 rate=\(player.rate)）")
+            return
+        }
+        dlog(.play, vid: vid ?? "-", "play 开始 rate=\(player.rate) ready=\(ready)")
         player.playImmediately(atRate: 1.0)
     }
-    func pause() { player.pause() }
+    func pause() {
+        if player.rate > 0 { dlog(.play, vid: vid ?? "-", "pause") }
+        player.pause()
+    }
 
     /// 预热解码器：让播放管线提前准备好，真正 play 时几乎零延迟。
     /// 注意：未就绪时 preroll 会直接失败，所以要等 ready 之后再调；
