@@ -18,6 +18,13 @@ struct SettingsView: View {
     @State private var cacheMB: Int = 0
     @State private var testing = false
     @State private var testResult: String?
+    @State private var debugOn = Diagnostics.shared.enabled
+    @State private var uploading = false
+    @State private var uploadMsg: String?
+    @State private var logLines = 0
+    @State private var checking = false
+    @State private var checkResults: [CheckResult] = []
+    @State private var checkMsg: String?
 
     var body: some View {
         NavigationStack {
@@ -213,6 +220,160 @@ struct SettingsView: View {
                             }
                             .padding(.vertical, 9)
                         }
+                        // 自检
+                        section("自检") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("跑一遍关键路径，看看哪里有问题")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(Theme.textTertiary)
+
+                                Button {
+                                    Task {
+                                        checking = true
+                                        checkMsg = nil
+                                        await SelfCheck.shared.run()
+                                        checkResults = SelfCheck.shared.results
+                                        checking = false
+                                        checkMsg = "完成：通过 \(checkResults.filter { $0.ok }.count)/\(checkResults.count)"
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if checking {
+                                            ProgressView().tint(.white).scaleEffect(0.7)
+                                        }
+                                        Text(checking ? "检查中…" : "开始自检")
+                                            .font(.system(size: 14, weight: .medium))
+                                    }
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 38)
+                                    .background(RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color(white: 0.18)))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(checking)
+
+                                if !checkResults.isEmpty {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ForEach(checkResults) { r in
+                                            HStack(spacing: 6) {
+                                                Image(systemName: r.ok
+                                                      ? "checkmark.circle.fill"
+                                                      : "xmark.circle.fill")
+                                                    .font(.system(size: 12))
+                                                    .foregroundStyle(r.ok
+                                                                     ? Color.green
+                                                                     : Theme.primary)
+                                                VStack(alignment: .leading, spacing: 1) {
+                                                    Text(r.name)
+                                                        .font(.system(size: 12.5, weight: .medium))
+                                                        .foregroundStyle(.white)
+                                                    Text(r.detail
+                                                         + (r.ms != nil ? " · \(r.ms!)ms" : ""))
+                                                        .font(.system(size: 11))
+                                                        .foregroundStyle(Theme.textTertiary)
+                                                }
+                                                Spacer(minLength: 0)
+                                            }
+                                        }
+                                    }
+                                    .padding(.top, 2)
+
+                                    Button {
+                                        UIPasteboard.general.string = SelfCheck.shared.report()
+                                        checkMsg = "报告已复制"
+                                    } label: {
+                                        Text("复制报告")
+                                            .font(.system(size: 13, weight: .medium))
+                                            .foregroundStyle(Theme.primary)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 34)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                if let m = checkMsg {
+                                    Text(m)
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Theme.textTertiary)
+                                }
+                            }
+                            .padding(.vertical, 9)
+                        }
+
+                        // 排障日志
+                        section("排障日志") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                row("排障模式",
+                                    subtitle: "平时不记录日志。开启后记录播放/图层/网络细节，用于定位问题") {
+                                    Toggle("", isOn: Binding(
+                                        get: { debugOn },
+                                        set: { on in
+                                            debugOn = on
+                                            Diagnostics.shared.setEnabled(on)
+                                            UserDefaults.standard.set(on, forKey: "debug.logEnabled")
+                                            logLines = Diagnostics.shared.lineCount()
+                                        }))
+                                    .labelsHidden()
+                                    .tint(Theme.primary)
+                                }
+
+                                if debugOn {
+                                    Text("已记录 \(logLines) 行")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(Theme.textTertiary)
+
+                                    Text("复现问题后点下面的按钮上传，我会直接在电脑上看到")
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(Theme.textTertiary)
+
+                                    HStack(spacing: 10) {
+                                        Button {
+                                            Task { await uploadLogs() }
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                if uploading {
+                                                    ProgressView().tint(.white).scaleEffect(0.7)
+                                                }
+                                                Text(uploading ? "上传中…" : "上传日志")
+                                                    .font(.system(size: 14, weight: .medium))
+                                            }
+                                            .foregroundStyle(.white)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 38)
+                                            .background(RoundedRectangle(cornerRadius: 8)
+                                                .fill(Theme.primary))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .disabled(uploading)
+
+                                        Button {
+                                            Diagnostics.shared.clear()
+                                            logLines = 0
+                                            uploadMsg = "已清空"
+                                        } label: {
+                                            Text("清空")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 72, height: 38)
+                                                .background(RoundedRectangle(cornerRadius: 8)
+                                                    .fill(Color(white: 0.18)))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+
+                                    if let m = uploadMsg {
+                                        Text(m)
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(m.contains("成功")
+                                                             ? Color.green.opacity(0.9)
+                                                             : Theme.textTertiary)
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 9)
+                        }
+
                         // 服务器
                         section("服务器") {
                             VStack(alignment: .leading, spacing: 10) {
@@ -331,6 +492,20 @@ struct SettingsView: View {
     private func refreshCacheSize() {
         let bytes = VideoCache.shared.usedBytes()
         cacheMB = Int((Double(bytes) / 1024 / 1024).rounded())
+    }
+
+    private func uploadLogs() async {
+        uploading = true
+        uploadMsg = nil
+        let r = await Diagnostics.shared.upload()
+        uploading = false
+        switch r {
+        case .success(let n):
+            uploadMsg = "上传成功（\(n) 字符）"
+            logLines = Diagnostics.shared.lineCount()
+        case .failure(let e):
+            uploadMsg = "上传失败：\(e.localizedDescription)"
+        }
     }
 
     private func loadStats() {
