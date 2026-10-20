@@ -177,6 +177,8 @@ final class PageVideoView: UIView {
     private var playingStarted = false
     /// 播放器图层是否真的画出了帧（方案 A 的核心判据）
     private var layerHasFrame = false
+    /// 上一次静图显示状态（仅用于日志去重）
+    private var lastShowStill: Bool?
 
     var onLike: ((String) -> Void)?
     var onSave: ((String) -> Void)?
@@ -264,6 +266,9 @@ final class PageVideoView: UIView {
                 // 方案 A：图层真正有帧了，这时才允许撤静图
                 if !self.layerHasFrame {
                     self.layerHasFrame = true
+                    let t = self.playerLayer.player?.currentTime().seconds ?? -1
+                    dlog(.layer, vid: self.vid,
+                         "图层出画 t=\(String(format: "%.3f", t))")
                     self.updateStills()
                 }
             }
@@ -371,6 +376,16 @@ final class PageVideoView: UIView {
     /// 方案 A：多等 layerHasFrame 这一环，避免播放器还没出画就把静图撤掉导致黑一帧
     private func updateStills() {
         let showStill = !(isActivePage && playingStarted && layerHasFrame)
+        let prevShow = lastShowStill
+        if prevShow != showStill {
+            lastShowStill = showStill
+            let t = playerLayer.player?.currentTime().seconds ?? -1
+            dlog(.layer, vid: vid,
+                 "静图 \(showStill ? "显示" : "撤除") active=\(isActivePage) "
+                 + "playing=\(playingStarted) hasFrame=\(layerHasFrame) "
+                 + "readyForDisplay=\(playerLayer.isReadyForDisplay) "
+                 + "t=\(String(format: "%.3f", t))")
+        }
 
         if showStill {
             if let img = serverFrame() ?? FramePrefetcher.shared.cached(vid) {
@@ -455,6 +470,9 @@ final class PageVideoView: UIView {
             return
         }
         if active {
+            dlog(.layer, vid: vid,
+                 "激活 页面 readyForDisplay=\(playerLayer.isReadyForDisplay) "
+                 + "rate=\(playerLayer.player?.rate ?? 0) hasFrame=\(layerHasFrame)")
             // 如果图层当前就有画面（之前播过），立刻认定有帧，避免静图盖死
             if playerLayer.isReadyForDisplay {
                 layerHasFrame = true
@@ -465,6 +483,7 @@ final class PageVideoView: UIView {
                 // 也强制揭图，避免「画面停在第一帧、声音在走」
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
                     guard let self, self.isActivePage, !self.playingStarted else { return }
+                    dlog(.layer, vid: self.vid, "350ms 兜底揭图")
                     self.playingStarted = true
                     // 兜底：400ms 还没收到 isReadyForDisplay 也强制认为有帧，
                     // 否则静图会一直盖着（表现为画面不动）
