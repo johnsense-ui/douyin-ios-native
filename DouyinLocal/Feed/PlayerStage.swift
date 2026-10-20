@@ -463,6 +463,10 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
         // 兜底解锁：万一长按 cancelled 没触发，这里恢复滑动
         if !sv.isScrollEnabled && !adjustingRate {
             sv.isScrollEnabled = true
+            dlog(.scroll, "兜底解锁滑动")
+        }
+        if page != settledPage {
+            dlog(.scroll, "落位 第\(page + 1)/\(itemsCount) vid=\(page < items.count ? items[page].vid : "-")")
         }
         let page = max(0, min(Int((sv.contentOffset.y / bounds.height).rounded()),
                              itemsCount - 1))
