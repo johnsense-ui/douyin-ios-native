@@ -45,10 +45,22 @@ final class APIClient {
         guard let url = c.url else { throw APIError.badURL }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, resp) = try await session.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw APIError.http((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        let t0 = Date()
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await session.data(for: req)
+        } catch {
+            dlog(.net, "\(path) 失败 \(error.localizedDescription)")
+            throw error
         }
+        let ms = Int(Date().timeIntervalSince(t0) * 1000)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+            dlog(.net, "\(path) HTTP \(code) \(ms)ms")
+            throw APIError.http(code)
+        }
+        dlog(.net, "\(path) OK \(ms)ms \(data.count)B")
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
