@@ -465,14 +465,12 @@ final class StageView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate
             sv.isScrollEnabled = true
             dlog(.scroll, "兜底解锁滑动")
         }
-        if page != settledPage {
-            dlog(.scroll, "落位 第\(page + 1)/\(itemsCount) vid=\(page < items.count ? items[page].vid : "-")")
-        }
         let page = max(0, min(Int((sv.contentOffset.y / bounds.height).rounded()),
                              itemsCount - 1))
         centerPage = page
 
         if page != settledPage {
+            dlog(.scroll, "落位 第\(page + 1)/\(itemsCount) vid=\(page < items.count ? items[page].vid : "-")")
             settledPage = page
             pool?.keep(items, around: page)
             syncPages()
