@@ -212,7 +212,7 @@
 				A1B2C3D40000000000000994 /* SelfCheck.swift */,
 			);
 			path = Diagnostics;
-			sourceTree = <group>;
+			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
