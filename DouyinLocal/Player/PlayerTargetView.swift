@@ -30,6 +30,7 @@ struct PlayerTargetView: View {
     @State private var index: Int
     @State private var paused = false
     @State private var authorTarget: AuthorTarget?
+    @State private var similarTarget: SimilarTarget?
 
     private var items: [FeedItem] { targets }
 
@@ -68,10 +69,23 @@ struct PlayerTargetView: View {
                 ForEach(hearts.bursts) { $0 }
 
                 if paused {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 62))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .allowsHitTesting(false)
+                    VStack(spacing: 22) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 62))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .allowsHitTesting(false)
+
+                        if index < items.count {
+                            let it = items[index]
+                            FindSimilarButton(
+                                vid: it.vid,
+                                t: pool.currentTime(of: it.vid) ?? 0,
+                                frameURL: APIClient.frameURL(it.vid),
+                                author: it.author,
+                                target: $similarTarget)
+                        }
+                    }
+                    .offset(y: 30)
                 }
             }
 
@@ -113,6 +127,12 @@ struct PlayerTargetView: View {
         }
         .fullScreenCover(item: $authorTarget) { t in
             AuthorView(authorId: t.id)
+        }
+        .fullScreenCover(item: $similarTarget) { t in
+            SimilarView(queryVid: t.vid,
+                        queryTime: t.t,
+                        queryFrameURL: t.frameURL,
+                        authorName: t.author)
         }
     }
 
