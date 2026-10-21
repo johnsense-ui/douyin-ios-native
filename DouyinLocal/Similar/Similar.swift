@@ -100,16 +100,30 @@ struct SimilarQuery {
 // MARK: - 客户端
 
 enum SimilarAPI {
-    /// 找相似服务的基地址。默认和主服务同主机，端口 8800。
+    /// 默认地址：走 Tailscale 8447（和主服务同一个域名，只换端口）
+    static let defaultBase = "https://locvid-pc.tail83739b.ts.net:8447"
+
+    /// 找相似服务的基地址，可在设置里修改
     static var baseURL: URL {
         if let s = UserDefaults.standard.string(forKey: "similar.base"),
            let u = URL(string: s), !s.isEmpty {
             return u
         }
-        // 从主服务地址推导：把端口换掉
-        var c = URLComponents(url: APIClient.baseURL, resolvingAgainstBaseURL: false)
-        c?.port = 8800
-        return c?.url ?? URL(string: "http://127.0.0.1:8800")!
+        return URL(string: defaultBase)!
+    }
+
+    /// 保存地址（空字符串 = 恢复默认）
+    static func setBase(_ s: String) {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        if t.isEmpty {
+            UserDefaults.standard.removeObject(forKey: "similar.base")
+        } else {
+            UserDefaults.standard.set(t, forKey: "similar.base")
+        }
+    }
+
+    static var currentBaseText: String {
+        UserDefaults.standard.string(forKey: "similar.base") ?? defaultBase
     }
 
     static func search(_ q: SimilarQuery) async throws -> SimilarResult {
@@ -132,13 +146,34 @@ enum SimilarAPI {
         return r
     }
 
-    static func status() async -> Bool {
+    struct Status {
+        var reachable: Bool = false
+        var ready: Bool = false
+        var loadSeconds: Double = 0
+        var error: String = ""
+    }
+
+    static func checkStatus() async -> Status {
+        var st = Status()
         guard let u = URL(string: baseURL.absoluteString + "/api2/similar/status") else {
-            return false
+            return st
         }
-        guard let (data, _) = try? await URLSession.shared.data(from: u),
+        var req = URLRequest(url: u)
+        req.timeoutInterval = 8
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              (resp as? HTTPURLResponse)?.statusCode == 200,
               let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return false }
-        return (d["ready"] as? Bool) ?? false
+        else {
+            return st
+        }
+        st.reachable = true
+        st.ready = (d["ready"] as? Bool) ?? false
+        st.loadSeconds = (d["loadSeconds"] as? Double) ?? 0
+        st.error = (d["error"] as? String) ?? ""
+        return st
+    }
+
+    static func status() async -> Bool {
+        await checkStatus().ready
     }
 }
