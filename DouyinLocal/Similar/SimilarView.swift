@@ -66,9 +66,13 @@ struct SimilarView: View {
         .fullScreenCover(item: $playRoute) { r in
             PlayerTargetView(targets: r.items,
                              startVid: r.startVid,
-                             authorName: r.items.first(where: { \.vid == r.startVid })?.author ?? ",
+                             authorName: authorOf(r.startVid),
                              startTime: r.startTime)
         }
+    }
+
+    private func authorOf(_ vid: String) -> String {
+        playRoute?.items.first(where: { $0.vid == vid })?.author ?? ""
     }
 
     // MARK: - 顶栏
@@ -320,7 +324,9 @@ struct SimilarView: View {
                             Text("点赞门槛")
                                 .font(.system(size: 14)).foregroundStyle(.white)
                             HStack(spacing: 8) {
-                                ForEach(diggOptions, id: \.1) { label, val in
+                                ForEach(Array(diggOptions.enumerated()), id: \.offset) { _, opt in
+                                    let label = opt.0
+                                    let val = opt.1
                                     chipBtn(label, selected: minDigg == val) {
                                         minDigg = val
                                         applyFilters()
@@ -371,7 +377,9 @@ struct SimilarView: View {
                             Text("排序")
                                 .font(.system(size: 14)).foregroundStyle(.white)
                             HStack(spacing: 8) {
-                                ForEach(sortOptions, id: \.1) { label, val in
+                                ForEach(Array(sortOptions.enumerated()), id: \.offset) { _, opt in
+                                    let label = opt.0
+                                    let val = opt.1
                                     chipBtn(label, selected: sortMode == val) {
                                         sortMode = val
                                         applyFilters()
