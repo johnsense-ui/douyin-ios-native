@@ -64,7 +64,10 @@ struct SimilarView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task { await runQuery() }
+        .task {
+            loadSavedFilters()
+            await runQuery()
+        }
         .fullScreenCover(item: $playRoute) { r in
             PlayerTargetView(targets: r.items,
                              startVid: r.startVid,
@@ -351,8 +354,13 @@ struct SimilarView: View {
                         // 1. 排除同作者
                         filterRow("排除同一作者",
                                   sub: "默认开启，避免结果被同一个作者占满") {
-                            Toggle("", isOn: $excludeSameAuthor)
-                                .labelsHidden().tint(Theme.primary)
+                            Toggle("", isOn: Binding(
+                                get: { excludeSameAuthor },
+                                set: { v in
+                                    excludeSameAuthor = v
+                                    applyFilters()
+                                }))
+                            .labelsHidden().tint(Theme.primary)
                         }
 
                         // 2. 同作者上限
@@ -360,7 +368,12 @@ struct SimilarView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("同一作者最多保留")
                                     .font(.system(size: 14)).foregroundStyle(.white)
-                                Picker("", selection: $sameAuthorLimit) {
+                                Picker("", selection: Binding(
+                                    get: { sameAuthorLimit },
+                                    set: { v in
+                                        sameAuthorLimit = v
+                                        applyFilters()
+                                    })) {
                                     Text("不限").tag(0)
                                     Text("1 条").tag(1)
                                     Text("2 条").tag(2)
@@ -564,6 +577,34 @@ struct SimilarView: View {
 
     // MARK: - 逻辑
 
+    /// 载入上次的筛选条件
+    private func loadSavedFilters() {
+        let d = SimilarFilterStore.load()
+        guard !d.isEmpty else { return }
+        if let v = d["exAuthor"] as? Bool { excludeSameAuthor = v }
+        if let v = d["authorLimit"] as? Int { sameAuthorLimit = v }
+        if let v = d["minDigg"] as? Int { minDigg = v }
+        if let v = d["source"] as? String, !v.isEmpty { source = v }
+        if let v = d["minScore"] as? Double { minScore = v }
+        if let v = d["sort"] as? String { sortMode = v }
+        if let v = d["timeRange"] as? Int { timeRange = v }
+        if let v = d["blocked"] as? [String] { blockedAuthors = v }
+    }
+
+    /// 保存当前筛选条件
+    private func saveFilters() {
+        SimilarFilterStore.save([
+            "exAuthor": excludeSameAuthor,
+            "authorLimit": sameAuthorLimit,
+            "minDigg": minDigg,
+            "source": source ?? "",
+            "minScore": minScore,
+            "sort": sortMode,
+            "timeRange": timeRange,
+            "blocked": blockedAuthors,
+        ])
+    }
+
     private func addBlock() {
         let t = blockInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty, !blockedAuthors.contains(t) else { return }
@@ -573,6 +614,7 @@ struct SimilarView: View {
     }
 
     private func resetFilters() {
+        SimilarFilterStore.clear()
         excludeSameAuthor = true
         sameAuthorLimit = 2
         minDigg = 0
@@ -687,6 +729,7 @@ struct SimilarView: View {
         }
 
         items = list
+        saveFilters()
     }
 
     /// 点结果 → 拉全量条目 → 从匹配时间点开始播放
@@ -715,4 +758,22 @@ struct SimilarPlayRoute: Identifiable {
     let startVid: String
     let startTime: Double
     var id: String { startVid }
+}
+
+// MARK: - 筛选条件持久化
+
+struct SimilarFilterStore {
+    static let key = "similar.filters"
+
+    static func save(_ d: [String: Any]) {
+        UserDefaults.standard.set(d, forKey: key)
+    }
+
+    static func load() -> [String: Any] {
+        (UserDefaults.standard.dictionary(forKey: key)) ?? [:]
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
