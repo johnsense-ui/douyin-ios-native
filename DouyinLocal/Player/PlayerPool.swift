@@ -254,6 +254,19 @@ final class PlayerPool: ObservableObject {
         slots[assign(item)].player
     }
 
+    /// 取已有槽的播放器（不会新建槽）
+    func playerIfAny(for vid: String) -> AVPlayer? {
+        guard let i = slotOf[vid] else { return nil }
+        return slots[i].player
+    }
+
+    /// 当前播放位置（秒）。没这个槽就返回 nil
+    func currentTime(of vid: String) -> Double? {
+        guard let i = slotOf[vid] else { return nil }
+        let t = slots[i].player.currentTime().seconds
+        return t.isFinite ? t : nil
+    }
+
     func isReady(_ vid: String) -> Bool {
         guard let i = slotOf[vid] else { return false }
         return slots[i].ready
