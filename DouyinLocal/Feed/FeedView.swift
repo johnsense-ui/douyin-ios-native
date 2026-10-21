@@ -59,23 +59,15 @@ struct FeedView: View {
                         .foregroundStyle(.white.opacity(0.5))
                         .allowsHitTesting(false)
 
-                    Button { openSimilar() } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "viewfinder.circle")
-                                .font(.system(size: 15, weight: .medium))
-                            Text("找相似")
-                                .font(.system(size: 14, weight: .medium))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(height: 36)
-                        .background(
-                            Capsule()
-                                .fill(.black.opacity(0.55))
-                                .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5))
-                        )
+                    if index < store.items.count {
+                        let it = store.items[index]
+                        FindSimilarButton(
+                            vid: it.vid,
+                            t: pool.currentTime(of: it.vid) ?? 0,
+                            frameURL: APIClient.frameURL(it.vid),
+                            author: it.author,
+                            target: $similarTarget)
                     }
-                    .buttonStyle(.plain)
                 }
                 .offset(y: 40)
             }
@@ -297,12 +289,3 @@ struct UserAvatar: View {
     }
 }
 
-// MARK: - 找相似的目标
-
-struct SimilarTarget: Identifiable {
-    let vid: String
-    let t: Double
-    let frameURL: URL?
-    let author: String
-    var id: String { vid }
-}
