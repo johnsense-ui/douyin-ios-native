@@ -40,6 +40,7 @@ struct FeedView: View {
     /// 左滑进主页（用滑动转场，不用 fullScreenCover）
     @State private var slideAuthor: String?
     @State private var speedMode = false      // 倍速清屏
+    @State private var similarTarget: SimilarTarget?
 
     var body: some View {
         ZStack {
@@ -51,10 +52,32 @@ struct FeedView: View {
             ForEach(hearts.bursts) { $0 }
 
             if paused && index < store.items.count {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .allowsHitTesting(false)
+                // 暂停：播放图标 + 找相似按钮
+                VStack(spacing: 22) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .allowsHitTesting(false)
+
+                    Button { openSimilar() } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "viewfinder.circle")
+                                .font(.system(size: 15, weight: .medium))
+                            Text("找相似")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(
+                            Capsule()
+                                .fill(.black.opacity(0.55))
+                                .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+                .offset(y: 40)
             }
 
             // 顶栏（固定）
@@ -164,6 +187,12 @@ struct FeedView: View {
                 SettingsView()
             }
         }
+        .fullScreenCover(item: $similarTarget) { t in
+            SimilarView(queryVid: t.vid,
+                        queryTime: t.t,
+                        queryFrameURL: t.frameURL,
+                        authorName: t.author)
+        }
     }
 
     private var stageView: some View {
@@ -178,6 +207,16 @@ struct FeedView: View {
                     onAuthor: { route = .author($0) },
                     onSwipeLeft: handleSwipeLeft,
                     onSpeedMode: { on in speedMode = on })
+    }
+
+    private func openSimilar() {
+        guard index < store.items.count else { return }
+        let it = store.items[index]
+        let t = pool.currentTime(of: it.vid) ?? 0
+        similarTarget = SimilarTarget(vid: it.vid,
+                                      t: max(0.5, t),
+                                      frameURL: APIClient.frameURL(it.vid),
+                                      author: it.author)
     }
 
     private func handleTap() {
@@ -256,4 +295,14 @@ struct UserAvatar: View {
             .overlay(Circle().stroke(.white.opacity(0.92), lineWidth: 1.3))
             .shadow(color: .black.opacity(0.28), radius: 2)
     }
+}
+
+// MARK: - 找相似的目标
+
+struct SimilarTarget: Identifiable {
+    let vid: String
+    let t: Double
+    let frameURL: URL?
+    let author: String
+    var id: String { vid }
 }
