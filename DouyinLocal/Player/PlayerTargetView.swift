@@ -15,6 +15,8 @@ struct PlayerTargetView: View {
     let targets: [FeedItem]
     let startVid: String
     let authorName: String
+    /// 可选：从第几秒开始播（找相似跳转用）
+    let startTime: Double?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -30,10 +32,12 @@ struct PlayerTargetView: View {
 
     private var items: [FeedItem] { targets }
 
-    init(targets: [FeedItem], startVid: String, authorName: String) {
+    init(targets: [FeedItem], startVid: String, authorName: String,
+         startTime: Double? = nil) {
         self.targets = targets
         self.startVid = startVid
         self.authorName = authorName
+        self.startTime = startTime
         let i = targets.firstIndex(where: { $0.vid == startVid }) ?? 0
         self.startIndex = i
         _index = State(initialValue: i)
@@ -99,6 +103,7 @@ struct PlayerTargetView: View {
         .onAppear {
             // 播放/激活统一由 StageView.configure 负责（起始页已在 init 中确定），
             // 这里不再重复 focus，避免两处同时触发导致画面被静图盖住
+            seekToStartIfNeeded()
         }
         .onChange(of: index) { _, new in
             guard new < items.count else { return }
@@ -107,6 +112,21 @@ struct PlayerTargetView: View {
         }
         .fullScreenCover(item: $authorTarget) { t in
             AuthorView(authorId: t.id)
+        }
+    }
+
+    /// 找相似跳转：等到播放器就绪后 seek 到匹配时间点
+    private func seekToStartIfNeeded() {
+        guard let t = startTime, t > 0.3 else { return }
+        // 播放器准备需要一点时间，延迟执行
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [self] in
+            guard index < items.count else { return }
+            let it = items[index]
+            guard it.vid == startVid else { return }
+            guard let p = pool.playerIfAny(for: it.vid) else { return }
+            p.seek(to: CMTime(seconds: t, preferredTimescale: 600),
+                   toleranceBefore: .zero, toleranceAfter: .zero)
+            dlog(.play, vid: it.vid, "跳转到 \(String(format: "%.2f", t))s")
         }
     }
 
