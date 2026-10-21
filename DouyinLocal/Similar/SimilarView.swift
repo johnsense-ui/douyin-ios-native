@@ -365,10 +365,10 @@ struct SimilarView: View {
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(Theme.primary)
                             }
-                            Slider(value: $minScore, in: 0.75...0.95, step: 0.01) { _ in
-                            } onEditingChanged: { editing in
+                            Slider(value: $minScore, in: 0.75...0.95, step: 0.01,
+                                   onEditingChanged: { editing in
                                 if !editing { applyFilters() }
-                            }
+                            })
                             .tint(Theme.primary)
                         }
 
