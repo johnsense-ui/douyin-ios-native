@@ -481,9 +481,9 @@ final class PageVideoView: UIView {
                 p.play()
                 // 兜底：若 350ms 内 tick 没触发（比如 item 切换时时间观察者漏了一次），
                 // 也强制揭图，避免「画面停在第一帧、声音在走」
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
                     guard let self, self.isActivePage, !self.playingStarted else { return }
-                    dlog(.layer, vid: self.vid, "350ms 兜底揭图")
+                    dlog(.layer, vid: self.vid, "120ms 兜底揭图")
                     self.playingStarted = true
                     // 兜底：400ms 还没收到 isReadyForDisplay 也强制认为有帧，
                     // 否则静图会一直盖着（表现为画面不动）
@@ -503,7 +503,7 @@ final class PageVideoView: UIView {
 
     private func tick(_ t: CMTime) {
         // 真正开始出画面了，才允许撤掉静图
-        if isActivePage && !playingStarted && t.seconds > 0.12 {
+        if isActivePage && !playingStarted && t.seconds > 0.02 {
             playingStarted = true
             updateStills()
         }
