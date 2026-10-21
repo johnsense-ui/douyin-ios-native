@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 struct PlayerTargetView: View {
     let targets: [FeedItem]
