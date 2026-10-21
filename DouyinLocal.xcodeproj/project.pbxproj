@@ -32,6 +32,7 @@
 		A1B2C3D40000000000000995 /* SelfCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000994 /* SelfCheck.swift */; };
 		A1B2C3D40000000000000997 /* Similar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000996 /* Similar.swift */; };
 		A1B2C3D40000000000000999 /* SimilarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40000000000000998 /* SimilarView.swift */; };
+		A1B2C3D400000000000009A2 /* FindSimilarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D400000000000009A1 /* FindSimilarButton.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		A1B2C3D40000000000000994 /* SelfCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfCheck.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000996 /* Similar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Similar.swift; sourceTree = "<group>"; };
 		A1B2C3D40000000000000998 /* SimilarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SimilarView.swift; sourceTree = "<group>"; };
+		A1B2C3D400000000000009A1 /* FindSimilarButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindSimilarButton.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -224,6 +226,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D40000000000000996 /* Similar.swift */,
+				A1B2C3D400000000000009A1 /* FindSimilarButton.swift */,
 			);
 			path = Similar;
 			sourceTree = "<group>";
@@ -329,6 +332,7 @@
 				A1B2C3D40000000000000995 /* SelfCheck.swift in Sources */,
 				A1B2C3D40000000000000997 /* Similar.swift in Sources */,
 				A1B2C3D40000000000000999 /* SimilarView.swift in Sources */,
+				A1B2C3D400000000000009A2 /* FindSimilarButton.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
