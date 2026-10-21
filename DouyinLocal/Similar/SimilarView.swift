@@ -22,6 +22,8 @@ struct SimilarView: View {
     @State private var errorText: String?
     @State private var elapsedMs = 0
     @State private var showFilter = false
+    @State private var serviceState: SimilarAPI.Status?
+    @State private var retrying = false
 
     // 播放跳转
     @State private var playRoute: SimilarPlayRoute?
@@ -164,13 +166,62 @@ struct SimilarView: View {
                 Spacer()
             } else if items.isEmpty {
                 Spacer()
-                VStack(spacing: 10) {
+                VStack(spacing: 14) {
+                    Image(systemName: serviceState?.reachable == false
+                          ? "wifi.exclamationmark" : "magnifyingglass")
+                        .font(.system(size: 34))
+                        .foregroundStyle(Theme.textTertiary.opacity(0.6))
+
                     Text(errorText ?? "没有找到相似的视频")
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.textTertiary)
-                    Text("试试放宽筛选条件")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+
+                    if serviceState?.reachable == false {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("请在电脑上双击运行：")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Theme.textTertiary)
+                            Text("启动找相似.bat")
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundStyle(Theme.primary)
+                            Text("当前地址：\(SimilarAPI.currentBaseText)")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                        }
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 8)
+                            .fill(Color(white: 0.13)))
+                        .padding(.horizontal, 24)
+                    }
+
+                    if serviceState?.reachable == true {
+                        Text("试试放宽筛选条件（相似度下限调低）")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                    }
+
+                    Button {
+                        Task {
+                            retrying = true
+                            await runQuery()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if retrying {
+                                ProgressView().tint(.white).scaleEffect(0.65)
+                            }
+                            Text(retrying ? "重试中…" : "重试")
+                                .font(.system(size: 13.5, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 22)
+                        .frame(height: 38)
+                        .background(Capsule().fill(Color(white: 0.16)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(retrying)
                 }
                 Spacer()
             } else {
@@ -536,6 +587,24 @@ struct SimilarView: View {
     private func runQuery() async {
         loading = true
         errorText = nil
+
+        // 先确认后端活着
+        let st = await SimilarAPI.checkStatus()
+        serviceState = st
+        if !st.reachable {
+            loading = false
+            errorText = "连不上找相似服务"
+            return
+        }
+        if !st.ready {
+            loading = false
+            errorText = st.error.isEmpty
+                ? "服务正在加载模型，请稍等几秒后重试"
+                : "服务出错：\(st.error)"
+            return
+        }
+        if retrying { retrying = false }
+
         var q = SimilarQuery(vid: queryVid, t: queryTime)
         q.top = 100                       // 多取一些，客户端再筛
         q.excludeSameAuthor = false       // 同作者逻辑在客户端做（支持 N 条）
