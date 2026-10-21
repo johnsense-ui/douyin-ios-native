@@ -104,9 +104,13 @@ final class PlayerSlot: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
             guard let self else { return }
             self.player.pause()
+            // 强制把速率归零，否则下次 play() 会因为 rate>0 而误判"已在播"
+            self.player.rate = 0
             self.hasPreparedFrame = true
             self.player.isMuted = false
-            dlog(.play, vid: self.vid ?? "-", "预滚首帧完成 t=\(String(format: "%.3f", self.player.currentTime().seconds))")
+            let t = self.player.currentTime().seconds
+            dlog(.play, vid: self.vid ?? "-",
+                 "预滚首帧完成 t=\(String(format: "%.3f", t.isFinite ? t : 0)) rate=\(self.player.rate)")
         }
     }
 
@@ -117,11 +121,15 @@ final class PlayerSlot: NSObject {
     /// AVQueuePlayer + AVPlayerLooper 下重复 playImmediately 会把视频轨切回队首，
     /// 表现为「画面跳回第一帧、声音继续」。
     func play() {
-        if player.rate > 0 {
-            dlog(.play, vid: vid ?? "-", "play 跳过（已在播 rate=\(player.rate)）")
+        // 注意：不能只看 rate。预滚首帧后 rate 可能残留 1.0，但画面其实没动，
+        // 这时若直接跳过 play，画面就会停在原地干等（日志里表现为卡 350ms）。
+        let t0 = player.currentTime().seconds
+        if player.rate > 0 && t0 > 0.02 {
+            dlog(.play, vid: vid ?? "-", "play 跳过（真的在播 rate=\(player.rate) t=\(String(format: "%.3f", t0))）")
             return
         }
-        dlog(.play, vid: vid ?? "-", "play 开始 rate=\(player.rate) ready=\(ready)")
+        dlog(.play, vid: vid ?? "-",
+             "play 执行 rate=\(player.rate) t=\(String(format: "%.3f", t0.isFinite ? t0 : 0)) ready=\(ready)")
         player.playImmediately(atRate: 1.0)
     }
     func pause() {
