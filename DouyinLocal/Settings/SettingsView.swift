@@ -25,6 +25,9 @@ struct SettingsView: View {
     @State private var checking = false
     @State private var checkResults: [CheckResult] = []
     @State private var checkMsg: String?
+    @State private var similarBase = SimilarAPI.currentBaseText
+    @State private var similarStatus: SimilarAPI.Status?
+    @State private var similarTesting = false
 
     var body: some View {
         NavigationStack {
@@ -220,6 +223,90 @@ struct SettingsView: View {
                             }
                             .padding(.vertical, 9)
                         }
+                        // 找相似服务
+                        section("找相似") {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("视频暂停时点「找相似」，用当前画面在全库找视觉相似的视频")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(Theme.textTertiary)
+
+                                Text("服务地址")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.white)
+
+                                TextField("", text: $similarBase)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .keyboardType(.URL)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 36)
+                                    .background(RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color(white: 0.16)))
+
+                                HStack(spacing: 10) {
+                                    Button {
+                                        SimilarAPI.setBase(similarBase)
+                                        simTest()
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            if similarTesting {
+                                                ProgressView().tint(.white).scaleEffect(0.7)
+                                            }
+                                            Text(similarTesting ? "检测中…" : "保存并检测")
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 38)
+                                        .background(RoundedRectangle(cornerRadius: 8)
+                                            .fill(Theme.primary))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(similarTesting)
+
+                                    Button {
+                                        similarBase = SimilarAPI.defaultBase
+                                        SimilarAPI.setBase("")
+                                        simTest()
+                                    } label: {
+                                        Text("默认")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(.white)
+                                            .frame(width: 64, height: 38)
+                                            .background(RoundedRectangle(cornerRadius: 8)
+                                                .fill(Color(white: 0.18)))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+
+                                if let st = similarStatus {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(st.ready ? Color.green
+                                                  : (st.reachable ? Color.orange
+                                                     : Color(white: 0.4)))
+                                            .frame(width: 7, height: 7)
+                                        Text(st.ready
+                                             ? "已就绪（加载 \(String(format: "%.0f", st.loadSeconds))s）"
+                                             : (st.reachable
+                                                ? (st.error.isEmpty
+                                                   ? "服务在线，模型加载中…"
+                                                   : "服务出错：\(st.error)")
+                                                : "连不上服务"))
+                                            .font(.system(size: 11.5))
+                                            .foregroundStyle(Theme.textTertiary)
+                                    }
+                                }
+
+                                Text("没连上时，在电脑上双击运行「启动找相似.bat」")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.textTertiary.opacity(0.7))
+                            }
+                            .padding(.vertical, 9)
+                        }
+
                         // 自检
                         section("自检") {
                             VStack(alignment: .leading, spacing: 10) {
@@ -444,7 +531,7 @@ struct SettingsView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .preferredColorScheme(.dark)
-        .onAppear { loadStats(); refreshCacheSize() }
+        .onAppear { loadStats(); refreshCacheSize(); simTest() }
     }
 
     // MARK: - 组件
@@ -492,6 +579,18 @@ struct SettingsView: View {
     private func refreshCacheSize() {
         let bytes = VideoCache.shared.usedBytes()
         cacheMB = Int((Double(bytes) / 1024 / 1024).rounded())
+    }
+
+    private func simTest() {
+        similarTesting = true
+        similarStatus = nil
+        Task {
+            let st = await SimilarAPI.checkStatus()
+            await MainActor.run {
+                similarStatus = st
+                similarTesting = false
+            }
+        }
     }
 
     private func uploadLogs() async {
